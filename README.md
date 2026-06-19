@@ -62,25 +62,69 @@ Download the current public Dream Air model package from:
 
 [https://huggingface.co/Sumirui/dreamairtracking-dreamair-main-current](https://huggingface.co/Sumirui/dreamairtracking-dreamair-main-current)
 
-Create a local model package:
+Copy the Hugging Face repository contents into this local folder:
 
 ```text
-%LOCALAPPDATA%\DreamAirTracking\models\dreamair-main-current\
-  model.onnx
-  metadata.json
-  runtime_defaults.json
-  acceptance.json
-  model_card.md
-  sha256.txt
+%LOCALAPPDATA%\DreamAirTracking\models\
 ```
 
-Then create:
+After install, the local files must look like this:
 
 ```text
 %LOCALAPPDATA%\DreamAirTracking\models\model_registry.json
+%LOCALAPPDATA%\DreamAirTracking\models\sha256.txt
+
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-main-current\model.onnx
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-main-current\metadata.json
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-main-current\runtime_defaults.json
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-main-current\acceptance.json
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-main-current\model_card.md
+
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-expression-current\model.onnx
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-expression-current\metadata.json
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-expression-current\runtime_defaults.json
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-expression-current\acceptance.json
+%LOCALAPPDATA%\DreamAirTracking\models\dreamair-expression-current\model_card.md
 ```
 
-Example:
+Do not put the files inside an extra nested folder such as:
+
+```text
+%LOCALAPPDATA%\DreamAirTracking\models\dreamairtracking-dreamair-main-current-main\...
+```
+
+The app reads `model_registry.json` from `%LOCALAPPDATA%\DreamAirTracking\models\model_registry.json`, and that registry points to the two folders above.
+
+PowerShell download/install example:
+
+```powershell
+$modelRoot = Join-Path $env:LOCALAPPDATA "DreamAirTracking\models"
+$zip = Join-Path $env:TEMP "dreamairtracking-dreamair-main-current.zip"
+$extract = Join-Path $env:TEMP "dreamairtracking-dreamair-main-current"
+
+New-Item -ItemType Directory -Force $modelRoot | Out-Null
+Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
+
+Invoke-WebRequest `
+  -Uri "https://huggingface.co/Sumirui/dreamairtracking-dreamair-main-current/archive/main.zip" `
+  -OutFile $zip
+
+Expand-Archive -Force $zip $extract
+$downloadedRoot = Get-ChildItem $extract -Directory | Select-Object -First 1
+Copy-Item -Recurse -Force (Join-Path $downloadedRoot.FullName "*") $modelRoot
+```
+
+Quick check:
+
+```powershell
+Test-Path "$env:LOCALAPPDATA\DreamAirTracking\models\model_registry.json"
+Test-Path "$env:LOCALAPPDATA\DreamAirTracking\models\dreamair-main-current\model.onnx"
+Test-Path "$env:LOCALAPPDATA\DreamAirTracking\models\dreamair-expression-current\model.onnx"
+```
+
+All three commands should print `True`.
+
+The shipped `model_registry.json` already contains the needed entries. For reference, it points to:
 
 ```json
 {
@@ -93,9 +137,25 @@ Example:
       "role": "main",
       "architecture": "Siamese MobileNetV3-small",
       "runtime": "predict_live_multitask",
-      "onnx": "C:\\Users\\You\\AppData\\Local\\DreamAirTracking\\models\\dreamair-main-current\\model.onnx",
-      "metadata": "C:\\Users\\You\\AppData\\Local\\DreamAirTracking\\models\\dreamair-main-current\\metadata.json",
+      "onnx": "models/dreamair-main-current/model.onnx",
+      "metadata": "models/dreamair-main-current/metadata.json",
+      "runtimeDefaults": "models/dreamair-main-current/runtime_defaults.json",
+      "acceptance": "models/dreamair-main-current/acceptance.json",
       "outputs": ["gaze_xy", "openness_lr", "pupil_lr", "confidence"],
+      "default": true
+    },
+    {
+      "id": "dreamair-expression-current",
+      "displayName": "Dream Air Expression Auxiliary",
+      "deviceFamily": "Dream Air",
+      "role": "expression",
+      "architecture": "Siamese MobileNetV3-small",
+      "runtime": "predict_live_multitask",
+      "onnx": "models/dreamair-expression-current/model.onnx",
+      "metadata": "models/dreamair-expression-current/metadata.json",
+      "runtimeDefaults": "models/dreamair-expression-current/runtime_defaults.json",
+      "acceptance": "models/dreamair-expression-current/acceptance.json",
+      "outputs": ["wide_lr", "squint_lr"],
       "default": true
     }
   ]

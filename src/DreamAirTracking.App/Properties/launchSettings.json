@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "DreamAirTracking.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "DreamAirTracking.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

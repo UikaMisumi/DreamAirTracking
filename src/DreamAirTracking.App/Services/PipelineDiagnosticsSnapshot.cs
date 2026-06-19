@@ -1,0 +1,27 @@
+namespace DreamAirTracking.App.Services;
+
+public sealed record PipelineDiagnosticsSnapshot(
+    DateTimeOffset CapturedAt,
+    bool BrokenEyeLeftLive,
+    bool BrokenEyeRightLive,
+    bool BridgeMonitorLive,
+    bool BridgePupilEnabled,
+    string BridgePupilMode,
+    string WearTemplateStatus,
+    string WearTemplateAction,
+    string? WearTemplateId,
+    double? WearTemplateDistance,
+    bool VrcftProcessRunning,
+    bool VrcftModuleProcessRunning,
+    bool VrcftUdp9400Listening,
+    bool VrchatOscQueryLive,
+    int? VrchatOscQueryPort,
+    string? AvatarId,
+    bool FtPupilDilationPresent,
+    double? FtPupilDilation,
+    double? FtPupilDiameterLeft,
+    double? FtPupilDiameterRight,
+    string PupilParameterSummary,
+    string PupilGateAliasSummary,
+    bool? EyeDilationEnable,
+    bool? Vf68EyeDilationEnable);

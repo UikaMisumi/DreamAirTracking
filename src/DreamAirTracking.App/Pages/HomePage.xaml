@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DreamAirTracking.App.Pages.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:DreamAirTracking.App.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="Page_Loaded"
+    Unloaded="Page_Unloaded"
+    mc:Ignorable="d">
+
+    <Grid Padding="24" RowSpacing="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Eye Tracking" />
+            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="BrokenEye raw eye images to the selected Dream Air model package." />
+        </StackPanel>
+
+        <InfoBar
+            Grid.Row="1"
+            IsOpen="True"
+            Severity="Informational"
+            Title="Model runtime"
+            Message="Eye tracking starts the selected installed model package, sends VRCFT UDP 9400, and mirrors live state to App UDP 9401." />
+
+        <CommandBar
+            Grid.Row="2"
+            DefaultLabelPosition="Right"
+            IsDynamicOverflowEnabled="True">
+            <CommandBar.Content>
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock VerticalAlignment="Center" Text="Model package" />
+                    <ComboBox
+                        x:Name="ModelPresetBox"
+                        Width="260"
+                        SelectionChanged="ModelPresetBox_SelectionChanged" />
+                    <TextBlock
+                        x:Name="ModelPresetStatusText"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="--" />
+                </StackPanel>
+            </CommandBar.Content>
+            <AppBarButton x:Name="StartBridgeButton" Icon="Play" Label="Start Eye Tracking" Click="StartBridge_Click" />
+            <AppBarButton x:Name="StopBridgeButton" Icon="Stop" Label="Stop Eye Tracking" Click="StopBridge_Click" />
+            <AppBarButton Icon="Refresh" Label="Refresh" Click="Refresh_Click" />
+        </CommandBar>
+
+        <Grid Grid.Row="3" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Padding="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="BrokenEye" />
+                    <TextBlock Text="HTTP 127.0.0.1:5555" />
+                    <TextBlock x:Name="BrokenEyeStateText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Runtime reads /eye/left and /eye/right" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Padding="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Runtime" />
+                    <TextBlock x:Name="BridgeStateText" Text="Stopped" />
+                    <TextBlock x:Name="BridgeOutputText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Eye tracking runtime has not been started." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Padding="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="VRCFT" />
+                    <TextBlock Text="UDP 127.0.0.1:9400" />
+                    <TextBlock x:Name="VrcftStateText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Checking module listener..." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

@@ -1,0 +1,19 @@
+{
+  "schema": "dream_air_tracking.model_registry.v1",
+  "models": [
+    {
+      "id": "dreamair-main-current",
+      "displayName": "Dream Air current main model",
+      "deviceFamily": "Dream Air",
+      "role": "main",
+      "architecture": "Siamese MobileNetV3-small",
+      "runtime": "predict_live_multitask",
+      "onnx": "models/dreamair-main-current/model.onnx",
+      "metadata": "models/dreamair-main-current/metadata.json",
+      "runtimeDefaults": "models/dreamair-main-current/runtime_defaults.json",
+      "acceptance": "models/dreamair-main-current/acceptance.json",
+      "outputs": ["gaze_xy", "openness_lr", "pupil_lr", "confidence"],
+      "default": true
+    }
+  ]
+}

@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DreamAirTracking.App.Pages.CalibrationPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="Page_Loaded"
+    Unloaded="Page_Unloaded"
+    mc:Ignorable="d">
+
+    <Grid Padding="24" ColumnSpacing="20" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*" />
+            <ColumnDefinition Width="360" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Calibration" />
+            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Calibrate the current Dream Air model package for this headset fit." />
+            <StackPanel Margin="0,12,0,0" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="EyeMenuButton" Content="Gaze" Tag="eye" Click="CalibrationMenu_Click" />
+                <Button x:Name="EyelidMenuButton" Content="Eyelid" Tag="eyelid" Click="CalibrationMenu_Click" />
+                <Button x:Name="PupilMenuButton" Content="Pupil" Tag="pupil" Click="CalibrationMenu_Click" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border
+            Grid.Row="1"
+            Padding="20"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <Grid>
+                <StackPanel x:Name="PupilSection" Spacing="14" Visibility="Collapsed">
+                    <StackPanel Spacing="2">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Pupil" />
+                        <TextBlock
+                            x:Name="PupilStatusText"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Waiting for runtime monitor"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <ToggleSwitch
+                        x:Name="PupilAssistToggle"
+                        Header="Expression pupil shrink from wide"
+                        IsEnabled="False"
+                        Visibility="Collapsed"
+                        Toggled="BridgeOption_Toggled" />
+                    <ToggleSwitch
+                        x:Name="PupilDiameterToggle"
+                        Header="Model-radius pupil output"
+                        IsEnabled="False"
+                        Visibility="Collapsed"
+                        Toggled="BridgeOption_Toggled" />
+                    <ToggleSwitch
+                        x:Name="VrcftEyeExpressionToggle"
+                        Header="VRCFT eye shapes: wide / squint"
+                        Visibility="Collapsed"
+                        Toggled="BridgeOption_Toggled" />
+                    <ComboBox
+                        x:Name="PupilOutputModeBox"
+                        Header="Pupil output mode"
+                        SelectedIndex="0"
+                        Visibility="Collapsed"
+                        SelectionChanged="PupilOutputModeBox_SelectionChanged">
+                        <ComboBoxItem Content="Off" Tag="off" />
+                        <ComboBoxItem Content="Expression constrict on wide" Tag="eye_wide_assist" />
+                        <ComboBoxItem Content="Model radius debug" Tag="diameter" />
+                    </ComboBox>
+                    <TextBox
+                        x:Name="PupilCalibrationPathBox"
+                        Header="Pupil calibration file"
+                        PlaceholderText="pupil_diameter_calibration.json"
+                        Visibility="Collapsed"
+                        TextChanged="PupilCalibrationPathBox_TextChanged" />
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Left eye" />
+                        <Grid Width="128" Height="128" HorizontalAlignment="Center">
+                            <Ellipse
+                                Width="112"
+                                Height="112"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Fill="#202E3440"
+                                Stroke="#664CC9F0"
+                                StrokeThickness="2" />
+                            <Ellipse
+                                x:Name="LeftPupilInner"
+                                Width="22"
+                                Height="22"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Fill="#FF4CC9F0"
+                                Stroke="#DFFFFFFF"
+                                StrokeThickness="2" />
+                        </Grid>
+                        <TextBlock
+                            x:Name="LeftPupilMetricText"
+                            HorizontalAlignment="Center"
+                            Text="--" />
+                        <TextBlock
+                            x:Name="LeftPupilQualityText"
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="no pupil" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Right eye" />
+                        <Grid Width="128" Height="128" HorizontalAlignment="Center">
+                            <Ellipse
+                                Width="112"
+                                Height="112"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Fill="#202E3440"
+                                Stroke="#665B8CFF"
+                                StrokeThickness="2" />
+                            <Ellipse
+                                x:Name="RightPupilInner"
+                                Width="22"
+                                Height="22"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Fill="#FF5B8CFF"
+                                Stroke="#DFFFFFFF"
+                                StrokeThickness="2" />
+                        </Grid>
+                        <TextBlock
+                            x:Name="RightPupilMetricText"
+                            HorizontalAlignment="Center"
+                            Text="--" />
+                        <TextBlock
+                            x:Name="RightPupilQualityText"
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="no pupil" />
+                    </StackPanel>
+
+                    <TextBlock
+                        x:Name="PupilPipelineText"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Pipeline: waiting"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel x:Name="EyelidSection" Spacing="14" Visibility="Collapsed">
+                    <StackPanel Spacing="2">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Eyelid" />
+                        <TextBlock
+                            x:Name="EyelidStatusText"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Waiting for runtime monitor"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <InfoBar
+                        IsOpen="True"
+                        Severity="Informational"
+                        Title="Open / closed / open"
+                        Visibility="Collapsed"
+                        Message="Use Calibrate eyelids, follow the beep prompts, then restart eye tracking with the latest eyelid calibration." />
+                    <TextBox
+                        x:Name="OpennessCalibrationPathBox"
+                        Header="Eyelid openness calibration"
+                        PlaceholderText="openness_calibration.json"
+                        Visibility="Collapsed"
+                        TextChanged="OpennessCalibrationPathBox_TextChanged" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                        <Button Content="Use latest eyelid" Click="UseLatestOpennessCalibration_Click" />
+                        <Button x:Name="StartOpennessCalibrationButton" Content="Calibrate eyelids" Click="StartOpennessCalibration_Click" />
+                        <Button x:Name="StartOpennessTrainingCaptureButton" Content="Capture eyelid training" Click="StartOpennessTrainingCapture_Click" />
+                    </StackPanel>
+
+                    <Grid ColumnSpacing="16" RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Left eyelid" />
+                            <Grid Width="148" Height="148" HorizontalAlignment="Center">
+                                <Ellipse
+                                    Width="126"
+                                    Height="126"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Fill="#202E3440"
+                                    Stroke="#6650D890"
+                                    StrokeThickness="2" />
+                                <Ellipse
+                                    x:Name="LeftEyelidInner"
+                                    Width="24"
+                                    Height="24"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Fill="#FF50D890"
+                                    Stroke="#DFFFFFFF"
+                                    StrokeThickness="2" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="LeftEyelidMetricText"
+                                HorizontalAlignment="Center"
+                                Text="--" />
+                            <TextBlock
+                                x:Name="LeftEyelidQualityText"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="no eyelid" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Spacing="8">
+                            <TextBlock Text="Right eyelid" />
+                            <Grid Width="148" Height="148" HorizontalAlignment="Center">
+                                <Ellipse
+                                    Width="126"
+                                    Height="126"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Fill="#202E3440"
+                                    Stroke="#6682A8FF"
+                                    StrokeThickness="2" />
+                                <Ellipse
+                                    x:Name="RightEyelidInner"
+                                    Width="24"
+                                    Height="24"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Fill="#FF82A8FF"
+                                    Stroke="#DFFFFFFF"
+                                    StrokeThickness="2" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="RightEyelidMetricText"
+                                HorizontalAlignment="Center"
+                                Text="--" />
+                            <TextBlock
+                                x:Name="RightEyelidQualityText"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="no eyelid" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock
+                        x:Name="EyelidPipelineText"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Runtime maps the calibrated score to left/right openness, then boosts near-open states to full open without lifting closed frames."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Viewbox x:Name="EyeSection" Stretch="Uniform">
+                    <Grid Width="620" Height="620">
+                        <Grid Margin="42">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Button x:Name="LeftUpButton" Grid.Row="0" Grid.Column="0" Tag="left_up" Click="StageButton_Click" />
+                            <Button x:Name="UpButton" Grid.Row="0" Grid.Column="1" Tag="up" Click="StageButton_Click" />
+                            <Button x:Name="RightUpButton" Grid.Row="0" Grid.Column="2" Tag="right_up" Click="StageButton_Click" />
+                            <Button x:Name="LeftButton" Grid.Row="1" Grid.Column="0" Tag="left" Click="StageButton_Click" />
+                            <Button x:Name="CenterButton" Grid.Row="1" Grid.Column="1" Tag="center" Click="StageButton_Click" />
+                            <Button x:Name="RightButton" Grid.Row="1" Grid.Column="2" Tag="right" Click="StageButton_Click" />
+                            <Button x:Name="LeftDownButton" Grid.Row="2" Grid.Column="0" Tag="left_down" Click="StageButton_Click" />
+                            <Button x:Name="DownButton" Grid.Row="2" Grid.Column="1" Tag="down" Click="StageButton_Click" />
+                            <Button x:Name="RightDownButton" Grid.Row="2" Grid.Column="2" Tag="right_down" Click="StageButton_Click" />
+                        </Grid>
+                    </Grid>
+                </Viewbox>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Grid.Column="1" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Padding="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Current parameters" />
+                    <InfoBar
+                        x:Name="ReviewInfoBar"
+                        IsOpen="True"
+                        Severity="Informational"
+                        Title="Ready"
+                        Message="Start calibration to update the selected module." />
+                    <ToggleSwitch
+                        x:Name="NinePointToggle"
+                        Header="Gaze mode"
+                        Toggled="NinePointToggle_Toggled" />
+                    <TextBlock x:Name="AlgorithmText" Text="Algorithm: waiting for live data" TextWrapping="Wrap" />
+                    <TextBlock x:Name="AutoMapText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Auto map: waiting for calibration fit" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" Padding="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Visibility="Collapsed">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Pipeline Diagnostics" />
+                    <Grid ColumnSpacing="10" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="128" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="BrokenEye" />
+                        <TextBlock x:Name="BrokenEyeStatusText" Grid.Column="1" Text="checking" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Runtime pupil" />
+                        <TextBlock x:Name="BridgePupilStatusText" Grid.Row="1" Grid.Column="1" Text="checking" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="2" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="VRCFT" />
+                        <TextBlock x:Name="VrcftStatusText" Grid.Row="2" Grid.Column="1" Text="checking" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="3" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="FT/v2" />
+                        <TextBlock x:Name="VrchatPupilStatusText" Grid.Row="3" Grid.Column="1" Text="checking" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="4" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Pupil gate aliases" />
+                        <TextBlock x:Name="AvatarGateStatusText" Grid.Row="4" Grid.Column="1" Text="checking" TextWrapping="Wrap" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Expander Grid.Row="2" Header="Details" Visibility="Collapsed">
+                <StackPanel Spacing="10">
+                    <TextBlock x:Name="SessionPathText" Text="Session: not started" TextWrapping="Wrap" />
+                    <TextBlock x:Name="CapturedPairsText" Text="Captured pairs: pending" />
+                    <TextBlock x:Name="ValidPairsText" Text="Valid pairs: pending" />
+                    <TextBlock x:Name="AverageDeltaText" Text="Average sync delta: pending" />
+                    <TextBlock x:Name="AverageConfidenceText" Text="Average confidence: pending" />
+                    <TextBlock x:Name="LowOpennessText" Text="Low openness pairs: pending" />
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource SubtitleTextBlockStyle}" Text="Runtime controls" />
+                    <TextBox
+                        x:Name="QuickGazeCalibrationPathBox"
+                        Header="Runtime gaze calibration"
+                        PlaceholderText="runtime_gaze_calibration.json"
+                        TextChanged="QuickGazeCalibrationPathBox_TextChanged" />
+                    <TextBox
+                        x:Name="QuickGazeCalibrationSessionBox"
+                        Header="Runtime calibration note"
+                        PlaceholderText="optional session id"
+                        TextChanged="QuickGazeCalibrationPathBox_TextChanged" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Use latest calibration" Click="UseLatestPupilCalibration_Click" />
+                        <Button Content="Use latest runtime" Click="UseLatestQuickGazeCalibration_Click" />
+                        <Button x:Name="StartBridgeFromCalibrationButton" Content="Start Eye Tracking" Click="StartBridgeFromCalibration_Click" />
+                        <Button x:Name="StopBridgeFromCalibrationButton" Content="Stop" Click="StopBridgeFromCalibration_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="BridgeOptionsText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
+        </Grid>
+
+        <Grid
+            Grid.Row="2"
+            Grid.ColumnSpan="2"
+            Margin="0,4,0,0">
+            <Button
+                x:Name="StartButton"
+                MinWidth="260"
+                Height="56"
+                Padding="22,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Click="StartCalibration_Click"
+                Style="{StaticResource AccentButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <FontIcon FontSize="18" Glyph="&#xE768;" />
+                    <TextBlock
+                        x:Name="StartButtonText"
+                        VerticalAlignment="Center"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="Start calibration" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="AcceptButton" Content="Accept" Visibility="Collapsed" Click="Accept_Click" />
+            <Button x:Name="RetryButton" Content="Retry" Visibility="Collapsed" Click="Retry_Click" />
+            <Button x:Name="MarkBadButton" Content="Mark bad" Visibility="Collapsed" Click="MarkBad_Click" />
+        </Grid>
+
+    </Grid>
+</Page>

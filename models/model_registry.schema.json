@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/dream_air_tracking/model_registry.schema.json",
+  "title": "DreamAirTracking Model Registry",
+  "type": "object",
+  "required": ["schema", "models"],
+  "properties": {
+    "schema": {
+      "const": "dream_air_tracking.model_registry.v1"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "displayName", "deviceFamily", "role", "runtime", "onnx", "metadata", "outputs"],
+        "properties": {
+          "id": { "type": "string" },
+          "displayName": { "type": "string" },
+          "deviceFamily": { "const": "Dream Air" },
+          "role": { "enum": ["main", "expression", "gaze_only", "debug"] },
+          "architecture": { "type": "string" },
+          "runtime": { "enum": ["predict_live_multitask", "predict_live"] },
+          "onnx": { "type": "string" },
+          "metadata": { "type": "string" },
+          "runtimeDefaults": { "type": "string" },
+          "acceptance": { "type": "string" },
+          "default": { "type": "boolean" },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "enum": ["gaze_xy", "openness_lr", "pupil_lr", "confidence", "wide_lr", "squint_lr"]
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

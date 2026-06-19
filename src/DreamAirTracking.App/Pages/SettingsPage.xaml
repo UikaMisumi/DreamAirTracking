@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DreamAirTracking.App.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:DreamAirTracking.App.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="24,16,24,16" RowSpacing="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Settings" />
+        <StackPanel Grid.Row="1" MaxWidth="560" Spacing="16" HorizontalAlignment="Left">
+            <TextBox Header="BrokenEye host" Text="127.0.0.1" />
+            <NumberBox Header="BrokenEye HTTP port" Value="5555" Minimum="1" Maximum="65535" />
+            <NumberBox Header="VRCFT UDP port" Value="9400" Minimum="1" Maximum="65535" />
+            <TextBox Header="Current profile" Text="tracking_profile_final.json" />
+        </StackPanel>
+    </Grid>
+</Page>

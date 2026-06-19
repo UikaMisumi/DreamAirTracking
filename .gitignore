@@ -1,0 +1,51 @@
+# Build outputs
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+
+# Python cache / virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local runtime and training artifacts
+runs/
+models/*/
+!models/README.md
+!models/model_registry.schema.json
+!models/model_registry.example.json
+!models/.gitkeep
+
+# Local capture data and diagnostics
+calibration_session*/
+brokeneye_probe*/
+live_http*/
+/diagnostics*/
+logs/
+crash_capture*/
+pupil_diameter*/
+capture_http/
+capture_raw/
+*.log
+*_stdout.txt
+*_stderr.txt
+
+# Model weights and generated packages
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.zip
+
+# Personal/local config
+tracking_profile*.json
+SRanipalConfig.ini*
+steamvr_lighthouse_dependency_patch_*.txt
+
+# External SDK/source checkouts
+.external/
+third_party/

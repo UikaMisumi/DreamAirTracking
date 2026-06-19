@@ -31,6 +31,8 @@ SRanipal 或其它 face module 可以继续负责面部/表情。DreamAirTrackin
 - 只支持 Dream Air 这一类头显链路。
 - 需要 BrokenEye 正常提供 `/eye/left` 和 `/eye/right`；否则 runtime 会停在 `waiting_for_brokeneye`。
 - 需要 VRCFaceTracking 和 DreamAirTracking module 监听 UDP `9400`，才能完整输出到 VRChat。
+- VRCFaceTracking module 单独发布在：
+  [UikaMisumi/DreamAirTracking.VrcftModule](https://github.com/UikaMisumi/DreamAirTracking.VrcftModule)。
 - 模型权重不直接提交到 GitHub。公开模型包放在 Hugging Face：
   [Sumirui/dreamairtracking-dreamair-main-current](https://huggingface.co/Sumirui/dreamairtracking-dreamair-main-current)。
 - 当前 public runtime 默认不负责 SRanipal face/expression slot。
@@ -171,7 +173,29 @@ Schema files:
 
 The matching held-out test package is kept private because it contains raw eye-frame images. Maintainers keep it separately at `Sumirui/dreamairtracking-dreamair-main-current-testset`.
 
-### 3. Start Runtime
+### 3. Install The VRCFT Module
+
+Download the latest module release:
+
+[https://github.com/UikaMisumi/DreamAirTracking.VrcftModule/releases/latest](https://github.com/UikaMisumi/DreamAirTracking.VrcftModule/releases/latest)
+
+Extract `DreamAirTracking.VrcftModule-v0.1.0.zip` into:
+
+```text
+%APPDATA%\VRCFaceTracking\CustomLibs\b24a50f2-36bd-4a56-88f0-daa2a3727b5d\
+```
+
+After install, the folder should contain:
+
+```text
+DreamAirTracking.VrcftModule.dll
+DreamAirTracking.VrcftModule.pdb
+module.json
+```
+
+Restart VRCFaceTracking and enable the `DreamAirTracking` module. Keep SRanipal or another module enabled for face/lip tracking if you need it; this module is for the eye slot.
+
+### 4. Start Runtime
 
 1. Start BrokenEye and confirm both streams are live:
 

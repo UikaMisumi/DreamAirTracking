@@ -31,7 +31,8 @@ SRanipal 或其它 face module 可以继续负责面部/表情。DreamAirTrackin
 - 只支持 Dream Air 这一类头显链路。
 - 需要 BrokenEye 正常提供 `/eye/left` 和 `/eye/right`；否则 runtime 会停在 `waiting_for_brokeneye`。
 - 需要 VRCFaceTracking 和 DreamAirTracking module 监听 UDP `9400`，才能完整输出到 VRChat。
-- 模型权重不直接提交到 GitHub。请通过模型包/Release 分发。
+- 模型权重不直接提交到 GitHub。公开模型包放在 Hugging Face：
+  [Sumirui/dreamairtracking-dreamair-main-current](https://huggingface.co/Sumirui/dreamairtracking-dreamair-main-current)。
 - 当前 public runtime 默认不负责 SRanipal face/expression slot。
 
 ## How To Use
@@ -56,6 +57,10 @@ pip install -r requirements-training.txt
 ```
 
 ### 2. Install A Model Package
+
+Download the current public Dream Air model package from:
+
+[https://huggingface.co/Sumirui/dreamairtracking-dreamair-main-current](https://huggingface.co/Sumirui/dreamairtracking-dreamair-main-current)
 
 Create a local model package:
 
@@ -103,6 +108,8 @@ Schema files:
 
 - `models/model_registry.schema.json`
 - `models/model_registry.example.json`
+
+The matching held-out test package is kept private because it contains raw eye-frame images. Maintainers keep it separately at `Sumirui/dreamairtracking-dreamair-main-current-testset`.
 
 ### 3. Start Runtime
 

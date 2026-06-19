@@ -148,7 +148,74 @@ Gaze calibration can improve local fit without retraining. For better future mod
 
 ## Help Us Build Better Models
 
-If your Dream Air tracking is weak in a specific direction or eye state, useful data is:
+The app is designed so normal calibration can also become useful personal training data. You do not need to understand manifests or CSV files. Pick the calibration page that matches the problem, finish the prompts, then export the capture package.
+
+### Which Calibration Should I Run?
+
+| If you see this problem | Open this tab | Press this button | What it collects |
+|---|---|---|---|
+| Eyes look in the wrong direction | `Calibration -> Gaze` | `Start gaze calibration` | Personal gaze samples for center/up/down/left/right, or 9 points if advanced mode is enabled |
+| One corner is weak, such as down-right | `Calibration -> Gaze` | `Start gaze calibration` with 9-point mode | Edge gaze samples, especially `left_up`, `right_up`, `left_down`, `right_down` |
+| Blink does not close, or eyes look squeezed | `Calibration -> Eyelid` | `Start eyelid calibration` | Personal open / half-open / closed / blink eyelid shape |
+| Pupil size or pupil response looks unstable | `Calibration -> Pupil` | `Start pupil calibration` | Pupil runtime samples and quality gates; useful only when BrokenEye confidence/openness are good |
+
+In short:
+
+```text
+Gaze Cali   = where your eyes are looking
+Eyelid Cali = how open/closed your eyelids look
+Pupil Cali  = pupil size/quality behavior
+```
+
+### Recommended Beginner Collection
+
+If you want to help improve the public model, do this:
+
+1. Wear the Dream Air normally.
+2. Start BrokenEye and make sure both eye streams are live.
+3. Open DreamAirTracking.
+4. Go to `Calibration -> Gaze`.
+5. Enable 9-point mode if available.
+6. Press `Start gaze calibration`.
+7. Follow the dots until the app says calibration is complete.
+8. Without moving the headset, go to `Calibration -> Eyelid`.
+9. Press `Start eyelid calibration`.
+10. Follow the open / half-open / closed / blink prompts.
+11. If pupil behavior is the problem, also go to `Calibration -> Pupil` and press `Start pupil calibration`.
+12. Export the capture package.
+
+For a better personal package, repeat the same steps after taking the headset off and putting it back on. This creates a new `wearId`, which helps the model learn real headset fit changes.
+
+### How To Export
+
+The intended user flow is:
+
+```text
+Calibration complete
+  -> Export training package
+  -> DreamAirTrackingCapture_YYYYMMDD_HHMMSS.zip
+  -> Upload the zip yourself
+  -> Share the link in a GitHub issue
+```
+
+The app does not upload anything automatically. The zip should contain:
+
+```text
+session.json
+device.json
+capture_protocol.json
+labels.jsonl
+pairs.csv
+metrics.json
+calibration_report.md
+frames/
+```
+
+After a successful gaze calibration, `Export training package` appears on the Calibration page. Press it once, then upload the generated zip yourself.
+
+### What Counts As Useful Data?
+
+Useful data:
 
 - Full 9-point gaze calibration, especially `right_down`, `left_down`, `right_up`, `left_up`
 - Multiple re-wear sessions from the same person
@@ -156,15 +223,48 @@ If your Dream Air tracking is weak in a specific direction or eye state, useful 
 - Short failure replay after you notice a bad direction in VRChat
 - Notes about glasses, headset fit, lighting, and whether BrokenEye streams looked stable
 
-Please do **not** send random loose screenshots or only CSV row counts. A useful package must include the left/right eye frames, labels, session metadata, stage names, accepted/rejected state, and quality metrics.
+Not useful by itself:
 
-Detailed requirements are in:
+- Random screenshots
+- Only `runtime_launch_status.json`
+- Only CSV row counts
+- A recording where BrokenEye `/eye/left` or `/eye/right` was not live
+- A calibration you know was bad but did not mark or mention
+
+### What To Send
+
+Upload the exported zip to Google Drive, OneDrive, or another file host. Then open a GitHub issue with:
+
+```text
+Problem:
+  Example: right_down is weak / blink does not close / pupil unstable
+
+What I collected:
+  Gaze 9-point: yes/no
+  Eyelid: yes/no
+  Pupil: yes/no
+  Re-wear count: 1 / 2 / 3+
+
+Runtime:
+  Model package id:
+  BrokenEye /eye/left live: yes/no
+  BrokenEye /eye/right live: yes/no
+  VRCFT module running: yes/no
+
+Notes:
+  Glasses:
+  Lighting:
+  Headset fit:
+  Which direction or expression failed:
+
+Capture package link:
+```
+
+Detailed developer requirements are in:
 
 - `datasets/session_package.schema.md`
 - `docs/MODEL_ADAPTATION_DATA_AUDIT_zh.md`
 - `docs/SINGLE_HEADSET_RELEASE_AND_TRAINING_PLAN_zh.md`
-
-Users can upload capture packages to Google Drive / OneDrive / another file host and share the link manually. The app does not upload data automatically.
 
 ## Contact
 

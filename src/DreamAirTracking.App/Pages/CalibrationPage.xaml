@@ -375,25 +375,43 @@
             Grid.Row="2"
             Grid.ColumnSpan="2"
             Margin="0,4,0,0">
-            <Button
-                x:Name="StartButton"
-                MinWidth="260"
-                Height="56"
-                Padding="22,0"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Center"
-                Click="StartCalibration_Click"
-                Style="{StaticResource AccentButtonStyle}">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <FontIcon FontSize="18" Glyph="&#xE768;" />
-                    <TextBlock
-                        x:Name="StartButtonText"
-                        VerticalAlignment="Center"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="Start calibration" />
-                </StackPanel>
-            </Button>
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
+                <Button
+                    x:Name="ExportTrainingPackageButton"
+                    MinWidth="220"
+                    Height="48"
+                    Padding="18,0"
+                    VerticalAlignment="Center"
+                    Click="ExportTrainingPackage_Click"
+                    Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon FontSize="16" Glyph="&#xE118;" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="15"
+                            FontWeight="SemiBold"
+                            Text="Export training package" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="StartButton"
+                    MinWidth="260"
+                    Height="56"
+                    Padding="22,0"
+                    VerticalAlignment="Center"
+                    Click="StartCalibration_Click"
+                    Style="{StaticResource AccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon FontSize="18" Glyph="&#xE768;" />
+                        <TextBlock
+                            x:Name="StartButtonText"
+                            VerticalAlignment="Center"
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Text="Start calibration" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
             <Button x:Name="AcceptButton" Content="Accept" Visibility="Collapsed" Click="Accept_Click" />
             <Button x:Name="RetryButton" Content="Retry" Visibility="Collapsed" Click="Retry_Click" />
             <Button x:Name="MarkBadButton" Content="Mark bad" Visibility="Collapsed" Click="MarkBad_Click" />

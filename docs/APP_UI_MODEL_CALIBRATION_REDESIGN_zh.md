@@ -217,8 +217,70 @@ Capture training
 
 - 质量通过 -> 自动保存当前模块 calibration；
 - 质量失败 -> 状态提示“重新开始校准”；
-- 训练包导出 -> 开发者工具或 session 后台导出；
+- 训练包导出 -> 校准完成后显示 `Export training package`，普通用户不需要进 Sessions；
 - 使用最新 -> 保存成功后自动成为最新。
+
+## 傻瓜式采集和导出
+
+普通用户不需要理解 manifest。客户端要把“采集什么个人数据”翻译成三个 Cali：
+
+| 用户遇到的问题 | 选择哪个 Cali | 采集到的个人数据 | 是否适合训练 |
+|---|---|---|---|
+| 视线方向不准 | `Gaze` | center/up/down/left/right，9 点时包含四个 diagonal | 是，训练 `gaze_xy` |
+| 右下/左下/角落看不到 | `Gaze` + 9 点 | `right_down`、`left_down`、`right_up`、`left_up` hardcase | 是，训练 edge gaze |
+| 眨眼不明显、闭眼不够 | `Eyelid` | open/half/closed/blink 眼皮形状 | 是，训练 `openness_lr` |
+| 眼睛形状挤压 | `Eyelid` | 半闭、闭眼、自然眨眼曲线 | 是，训练 openness 曲线，必要时修 runtime |
+| 瞳孔不稳定 | `Pupil` | pupil runtime 状态和 quality gate | 仅质量通过时作为 weak pupil |
+
+推荐公开模型采集流程：
+
+```text
+1. 戴好 Dream Air
+2. 打开 BrokenEye，确认 /eye/left 和 /eye/right 正常
+3. 打开 DreamAirTracking
+4. Calibration -> Gaze -> 9-point -> Start gaze calibration
+5. Calibration -> Eyelid -> Start eyelid calibration
+6. 如果 pupil 是问题，再 Calibration -> Pupil -> Start pupil calibration
+7. 点 Export training package
+8. 得到 DreamAirTrackingCapture_*.zip
+9. 用户自己上传 Google Drive / OneDrive
+10. 在 GitHub issue 里贴链接和问题描述
+```
+
+最小可用包：
+
+```text
+Gaze 9-point 一次
+Eyelid 一次
+notes 写清楚失败方向或眼皮问题
+```
+
+推荐适配包：
+
+```text
+同一人摘戴 2-3 次
+每次都做 Gaze 9-point
+至少一次 Eyelid
+有问题再补 Pupil
+```
+
+导出按钮逻辑：
+
+```text
+Calibration complete
+  -> Export training package 按钮出现
+  -> 打包 session.json / labels.jsonl / pairs.csv / metrics.json / frames/
+  -> 输出到 %LOCALAPPDATA%/DreamAirTracking/capture_packages/
+```
+
+不接受：
+
+```text
+单独截图
+只有 CSV 行数
+BrokenEye 没有 live stream 的采集
+没有 accepted labels 的 session
+```
 
 ## Gaze 校准
 

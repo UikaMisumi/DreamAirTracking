@@ -153,6 +153,47 @@ public sealed partial class CalibrationPage : Page
         _ = StartCurrentModuleCalibrationAsync();
     }
 
+    private async void ExportTrainingPackage_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_sessionDirectory) || !Directory.Exists(_sessionDirectory))
+        {
+            ReviewInfoBar.Severity = InfoBarSeverity.Warning;
+            ReviewInfoBar.Title = "Nothing to export";
+            ReviewInfoBar.Message = "Finish a gaze calibration first, then export the training package.";
+            return;
+        }
+
+        try
+        {
+            ExportTrainingPackageButton.IsEnabled = false;
+            var outputDirectory = IOPath.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DreamAirTracking",
+                "capture_packages");
+            var result = await new CalibrationCapturePackageExporter().ExportAsync(new CalibrationCapturePackageExportOptions
+            {
+                SessionDirectory = _sessionDirectory,
+                OutputDirectory = outputDirectory,
+                RuntimeModelId = BridgeProcessService.Instance.CurrentMultitaskModelPreset
+            });
+
+            ReviewInfoBar.Severity = InfoBarSeverity.Success;
+            ReviewInfoBar.Title = "Training package exported";
+            ReviewInfoBar.Message = result.OutputZipPath;
+            AutoMapText.Text = $"Upload this zip yourself and share the link in a GitHub issue: {result.OutputZipPath}";
+        }
+        catch (Exception ex)
+        {
+            ReviewInfoBar.Severity = InfoBarSeverity.Error;
+            ReviewInfoBar.Title = "Export failed";
+            ReviewInfoBar.Message = ex.Message;
+        }
+        finally
+        {
+            ExportTrainingPackageButton.IsEnabled = true;
+        }
+    }
+
     private void CalibrationMenu_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string section })
@@ -474,6 +515,7 @@ public sealed partial class CalibrationPage : Page
         }
 
         SetCalibrationSection("eye");
+        ExportTrainingPackageButton.Visibility = Visibility.Collapsed;
 
         if (!BridgeProcessService.Instance.IsRunning)
         {
@@ -889,6 +931,7 @@ public sealed partial class CalibrationPage : Page
                 ? $"Runtime calibration: {runtimeCalibrationPath}. Eye tracking restarted with center-stage offset."
                 : $"Runtime calibration: {runtimeCalibrationPath}. Start eye tracking when ready."
             : $"Review output: {reportPath}. Missing runtime samples: {string.Join(", ", runtimeFit.MissingStages)}";
+        ExportTrainingPackageButton.Visibility = Visibility.Visible;
         SetActionButtonsEnabled(true);
         UpdateBridgeOptionsStatus();
     }
@@ -1382,6 +1425,7 @@ public sealed partial class CalibrationPage : Page
         NinePointToggle.IsEnabled = enabled && !_workflowStarted;
         StartOpennessCalibrationButton.IsEnabled = enabled && !_workflowStarted;
         StartOpennessTrainingCaptureButton.IsEnabled = enabled && !_workflowStarted;
+        ExportTrainingPackageButton.IsEnabled = enabled && !_workflowStarted && !string.IsNullOrWhiteSpace(_sessionDirectory);
     }
 
     private void SetCalibrationSection(string section)

@@ -8,44 +8,65 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="DreamAirTracking"
     mc:Ignorable="d">
-    <Grid Background="#20242D">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
 
-        <Border
-            Background="#171B24"
-            BorderBrush="#303746"
-            BorderThickness="0,0,1,0">
-            <Grid Padding="12,18" RowSpacing="10">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="2,0,0,18">
-                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="DreamAirTracking" />
-                </StackPanel>
+        <TitleBar
+            x:Name="AppTitleBar"
+            Title="DreamAirTracking"
+            BackRequested="TitleBar_BackRequested"
+            IsBackButtonVisible="{x:Bind NavFrame.CanGoBack, Mode=OneWay}"
+            IsPaneToggleButtonVisible="True"
+            PaneToggleRequested="TitleBar_PaneToggleRequested">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+            </TitleBar.IconSource>
+        </TitleBar>
 
-                <Button Grid.Row="1" HorizontalAlignment="Stretch" Content="Dashboard" Tag="home" Click="NavButton_Click" />
-                <Button Grid.Row="2" HorizontalAlignment="Stretch" Content="Calibration" Tag="calibration" Click="NavButton_Click" />
-                <Button Grid.Row="3" HorizontalAlignment="Stretch" Content="Diagnostics" Tag="pipeline" Click="NavButton_Click" />
-                <Button Grid.Row="4" HorizontalAlignment="Stretch" Content="About" Tag="about" Click="NavButton_Click" />
-                <Button Grid.Row="6" HorizontalAlignment="Stretch" Content="Settings" Tag="settings" Click="NavButton_Click" />
-            </Grid>
-        </Border>
-
-        <Frame x:Name="NavFrame" Grid.Column="1" />
+        <NavigationView
+            x:Name="NavView"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            SelectionChanged="NavView_SelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    Content="Dashboard"
+                    IsSelected="True"
+                    Tag="home">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE80F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Calibration" Tag="calibration">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Diagnostics" Tag="pipeline">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="About" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEA3A;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <Frame x:Name="NavFrame" />
+        </NavigationView>
 
         <Grid
             x:Name="CalibrationOverlayHost"
-            Grid.ColumnSpan="2"
+            Grid.RowSpan="2"
             Padding="28"
             Background="#FA0E1118"
             Visibility="Collapsed">
@@ -74,7 +95,7 @@
                 <TextBlock
                     x:Name="CalibrationOverlayInstructionText"
                     HorizontalAlignment="Center"
-                    Foreground="#C9D1DE"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="Look at this point." />
                 <TextBlock
                     x:Name="CalibrationOverlayCountdownText"
@@ -91,7 +112,7 @@
                 <TextBlock
                     x:Name="CalibrationOverlayStatusText"
                     HorizontalAlignment="Center"
-                    Foreground="#C9D1DE"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="Ready" />
             </StackPanel>
         </Grid>

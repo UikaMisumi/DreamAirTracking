@@ -73,7 +73,10 @@ public sealed class BridgeProcessService
             .Where(model =>
                 model.DeviceFamily.Equals("Dream Air", StringComparison.OrdinalIgnoreCase) &&
                 model.Runtime.Equals("predict_live_multitask", StringComparison.OrdinalIgnoreCase) &&
-                model.Role.Equals("main", StringComparison.OrdinalIgnoreCase))
+                model.Role.Equals("main", StringComparison.OrdinalIgnoreCase) &&
+                IsCompleteModelPackage(model))
+            .OrderByDescending(model => model.Default)
+            .ThenBy(model => model.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Select(model => new BridgeModelChoice(model.Id, model.DisplayName, true))
             .ToArray();
         if (registryChoices is { Length: > 0 })
@@ -842,7 +845,7 @@ public sealed class BridgeProcessService
             return null;
         }
 
-        return registry.FindById(Options.MultitaskModelPreset) ?? registry.FindDefaultMain();
+        return FindUsableMainModel(registry, Options.MultitaskModelPreset);
     }
 
     private static string? FindDefaultOnnxPath(string repoRoot)
@@ -1170,9 +1173,10 @@ public sealed class BridgeProcessService
     {
         var preset = NormalizeMultitaskModelPreset(options.MultitaskModelPreset);
         var registry = LoadModelRegistry(repoRoot);
-        var registryModel = registry?.FindById(preset) ?? registry?.FindDefaultMain();
+        var registryModel = FindUsableMainModel(registry, preset);
         if (registryModel is not null)
         {
+            options.MultitaskModelPreset = registryModel.Id;
             options.MultitaskOnnxPath = registryModel.ResolvedOnnx;
             options.MultitaskMetadataPath = registryModel.ResolvedMetadata;
             var expression = registry?.FindDefaultExpression();
@@ -1238,7 +1242,7 @@ public sealed class BridgeProcessService
     private static string ModelLabel(string presetId)
     {
         var normalized = NormalizeMultitaskModelPreset(presetId);
-        var registryModel = LoadModelRegistry(FindRepoRoot())?.FindById(normalized);
+        var registryModel = FindUsableMainModel(LoadModelRegistry(FindRepoRoot()), normalized);
         if (registryModel is not null)
         {
             return registryModel.DisplayName;
@@ -1252,6 +1256,41 @@ public sealed class BridgeProcessService
 
     private static ModelRegistry? LoadModelRegistry(string repoRoot) =>
         ModelRegistry.TryLoadUserOrRepo(repoRoot);
+
+    private static ModelRegistryEntry? FindUsableMainModel(ModelRegistry? registry, string? preferredId = null)
+    {
+        if (registry is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(preferredId))
+        {
+            var preferred = registry.FindById(preferredId);
+            if (preferred is not null &&
+                preferred.Role.Equals("main", StringComparison.OrdinalIgnoreCase) &&
+                IsCompleteModelPackage(preferred))
+            {
+                return preferred;
+            }
+        }
+
+        return registry.Models
+            .Where(model =>
+                model.DeviceFamily.Equals("Dream Air", StringComparison.OrdinalIgnoreCase) &&
+                model.Runtime.Equals("predict_live_multitask", StringComparison.OrdinalIgnoreCase) &&
+                model.Role.Equals("main", StringComparison.OrdinalIgnoreCase) &&
+                IsCompleteModelPackage(model))
+            .OrderByDescending(model => model.Default)
+            .ThenBy(model => model.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+    }
+
+    private static bool IsCompleteModelPackage(ModelRegistryEntry model)
+        => File.Exists(model.ResolvedOnnx) &&
+           File.Exists(model.ResolvedMetadata) &&
+           File.Exists(model.ResolvedRuntimeDefaults) &&
+           File.Exists(model.ResolvedAcceptance);
 
     private static double Clamp(double value, double min, double max, double fallback)
     {

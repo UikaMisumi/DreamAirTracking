@@ -1,6 +1,4 @@
-using System.IO.Compression;
 using System.Net;
-using System.Net.Http;
 using System.Text.Json;
 using DreamAirTracking.Core.Models;
 
@@ -27,7 +25,69 @@ public sealed class HuggingFaceModelDownloadService
             "DreamAirTracking",
             "models");
 
-    public async Task<ModelDownloadResult> InstallDefaultModelAsync(
+    public async Task<RemoteModelCatalog> RefreshCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        using var metadataDocument = await GetJsonAsync(
+            $"https://huggingface.co/api/models/{DefaultRepoId}",
+            cancellationToken);
+        var metadata = metadataDocument.RootElement;
+        var revision = metadata.TryGetProperty("sha", out var shaProperty)
+            ? shaProperty.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(revision))
+        {
+            throw new InvalidDataException("Hugging Face model metadata did not include a commit revision.");
+        }
+
+        DateTimeOffset? lastModified = null;
+        if (metadata.TryGetProperty("lastModified", out var lastModifiedProperty) &&
+            DateTimeOffset.TryParse(lastModifiedProperty.GetString(), out var parsedLastModified))
+        {
+            lastModified = parsedLastModified;
+        }
+
+        var registry = await DownloadRegistryAsync(revision, cancellationToken);
+        var siblingNames = ReadSiblingNames(metadata);
+        var packages = registry.Models
+            .Where(model =>
+                model.DeviceFamily.Equals("Dream Air", StringComparison.OrdinalIgnoreCase) &&
+                model.Runtime.Equals("predict_live_multitask", StringComparison.OrdinalIgnoreCase))
+            .Select(model => CreateRemotePackage(model, revision, lastModified, siblingNames))
+            .ToArray();
+
+        if (packages.Length == 0)
+        {
+            throw new InvalidDataException("No Dream Air model packages were listed in the Hugging Face model registry.");
+        }
+
+        return new RemoteModelCatalog(DefaultRepoId, revision, lastModified, packages);
+    }
+
+    public IReadOnlyList<InstalledModelPackage> LoadInstalledPackages()
+    {
+        var registry = ModelRegistry.TryLoad(ModelRegistry.DefaultUserRegistryPath());
+        if (registry is null)
+        {
+            return Array.Empty<InstalledModelPackage>();
+        }
+
+        return registry.Models
+            .Where(model =>
+                model.DeviceFamily.Equals("Dream Air", StringComparison.OrdinalIgnoreCase) &&
+                model.Runtime.Equals("predict_live_multitask", StringComparison.OrdinalIgnoreCase))
+            .Select(model => new InstalledModelPackage(
+                model.Id,
+                model.DisplayName,
+                model.Role,
+                model.Runtime,
+                model.ResolvedOnnx,
+                IsInstalledModelComplete(model),
+                model.Default))
+            .ToArray();
+    }
+
+    public async Task<ModelDownloadResult> DownloadPackageAsync(
+        RemoteModelPackage package,
         IProgress<ModelDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -41,55 +101,57 @@ public sealed class HuggingFaceModelDownloadService
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "DreamAirTracking");
-        var downloadRoot = Path.Combine(appData, "model_downloads");
-        var zipPath = Path.Combine(downloadRoot, $"dreamair-model-{operationId}.zip");
-        var extractPath = Path.Combine(downloadRoot, $"dreamair-model-{operationId}");
+        var downloadRoot = Path.Combine(appData, "model_downloads", operationId);
 
         try
         {
             Directory.CreateDirectory(downloadRoot);
             Directory.CreateDirectory(ModelRoot);
-            progress?.Report(new ModelDownloadProgress("download", 0, "Connecting to Hugging Face..."));
 
-            var url = BuildArchiveUrl(DefaultRepoId, DefaultRevision);
-            await DownloadAsync(url, zipPath, progress, cancellationToken);
+            progress?.Report(new ModelDownloadProgress("download", 0, $"Downloading {package.DisplayName}..."));
+            var remoteRegistry = await DownloadRegistryAsync(package.Revision, cancellationToken);
+            var selectedEntry = remoteRegistry.FindById(package.Id)
+                ?? throw new InvalidDataException($"Remote registry no longer contains {package.Id}.");
 
-            progress?.Report(new ModelDownloadProgress("extract", null, "Extracting model package..."));
-            if (Directory.Exists(extractPath))
+            var files = package.Files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            for (var index = 0; index < files.Length; index++)
             {
-                Directory.Delete(extractPath, recursive: true);
+                cancellationToken.ThrowIfCancellationRequested();
+                var file = files[index];
+                var fraction = files.Length == 0 ? 0 : (double)index / files.Length;
+                progress?.Report(new ModelDownloadProgress("download", fraction, $"Downloading {file}..."));
+                await DownloadFileAsync(file, package.Revision, downloadRoot, cancellationToken);
             }
 
-            ZipFile.ExtractToDirectory(zipPath, extractPath);
-            var packageRoot = FindExtractedPackageRoot(extractPath);
-            ValidatePackage(packageRoot);
-
+            ValidateDownloadedPackage(downloadRoot, selectedEntry);
             progress?.Report(new ModelDownloadProgress("install", null, "Installing model package..."));
-            InstallPackage(packageRoot, ModelRoot);
+            InstallDownloadedPackage(downloadRoot, selectedEntry);
 
             var statusPath = Path.Combine(appData, "model_download_status.json");
             await WriteStatusAsync(statusPath, new
             {
                 state = "installed",
                 repoId = DefaultRepoId,
-                revision = DefaultRevision,
+                revision = package.Revision,
+                modelId = package.Id,
+                modelDisplayName = package.DisplayName,
                 installedRegistryPath = Path.Combine(ModelRoot, "model_registry.json"),
                 timeUtc = DateTime.UtcNow
             }, cancellationToken);
 
-            progress?.Report(new ModelDownloadProgress("done", 1, "Model package installed."));
+            progress?.Report(new ModelDownloadProgress("done", 1, $"{package.DisplayName} installed."));
             return new ModelDownloadResult(
                 true,
-                "Model package installed. Select it from Model package, then start eye tracking.",
+                $"{package.DisplayName} installed. Select it from Home -> Model package.",
                 Path.Combine(ModelRoot, "model_registry.json"));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return await FailAsync("Model download was canceled. Your current installed model was not changed.", "canceled");
+            return await FailAsync("Model download was canceled. Current installed models were not changed.", "canceled");
         }
         catch (OperationCanceledException)
         {
-            return await FailAsync("Model download timed out. Your current installed model was not changed.", "timeout");
+            return await FailAsync("Model download timed out. Current installed models were not changed.", "timeout");
         }
         catch (HttpRequestException ex)
         {
@@ -98,9 +160,9 @@ public sealed class HuggingFaceModelDownloadService
                 HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden =>
                     "Model download failed. This Hugging Face model source requires access permission.",
                 HttpStatusCode.NotFound =>
-                    "Model download failed. The Hugging Face model source or revision was not found.",
+                    "Model download failed. The selected model file or revision was not found on Hugging Face.",
                 _ =>
-                    "Model download failed. Could not connect to Hugging Face. Your current installed model was not changed."
+                    "Model download failed. Could not connect to Hugging Face. Current installed models were not changed."
             };
             return await FailAsync($"{message} Details: {ex.Message}", "network");
         }
@@ -118,8 +180,7 @@ public sealed class HuggingFaceModelDownloadService
         }
         finally
         {
-            TryDelete(zipPath);
-            TryDeleteDirectory(extractPath);
+            TryDeleteDirectory(downloadRoot);
             IsDownloading = false;
         }
 
@@ -130,7 +191,8 @@ public sealed class HuggingFaceModelDownloadService
             {
                 state = "failed",
                 repoId = DefaultRepoId,
-                revision = DefaultRevision,
+                revision = package.Revision,
+                modelId = package.Id,
                 errorCode,
                 message,
                 currentModelPreserved = true,
@@ -141,152 +203,216 @@ public sealed class HuggingFaceModelDownloadService
         }
     }
 
-    private static async Task DownloadAsync(
-        string url,
-        string zipPath,
-        IProgress<ModelDownloadProgress>? progress,
+    private static RemoteModelPackage CreateRemotePackage(
+        ModelRegistryEntry model,
+        string revision,
+        DateTimeOffset? lastModified,
+        HashSet<string> siblingNames)
+    {
+        var files = new List<string>
+        {
+            RemotePath(model.Onnx),
+            RemotePath(model.Metadata),
+            RemotePath(model.RuntimeDefaults),
+            RemotePath(model.Acceptance)
+        };
+        var modelCard = Path.Combine(Path.GetDirectoryName(RemotePath(model.Onnx)) ?? string.Empty, "model_card.md")
+            .Replace('\\', '/');
+        if (siblingNames.Contains(modelCard))
+        {
+            files.Add(modelCard);
+        }
+
+        var version = lastModified is null
+            ? $"revision {ShortRevision(revision)}"
+            : $"{lastModified.Value:yyyy.MM.dd} ({ShortRevision(revision)})";
+
+        return new RemoteModelPackage(
+            model.Id,
+            model.DisplayName,
+            version,
+            model.Role,
+            model.Runtime,
+            model.Architecture,
+            revision,
+            lastModified,
+            model.Outputs,
+            files.Where(file => !string.IsNullOrWhiteSpace(file)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    private static async Task<JsonDocument> GetJsonAsync(string url, CancellationToken cancellationToken)
+    {
+        using var response = await Http.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+    }
+
+    private static async Task<ModelRegistry> DownloadRegistryAsync(string revision, CancellationToken cancellationToken)
+    {
+        var registryUrl = ResolveUrl("model_registry.json", revision);
+        using var response = await Http.GetAsync(registryUrl, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        var registry = JsonSerializer.Deserialize<ModelRegistry>(json, AppJsonOptions.Web());
+        if (registry is null ||
+            !registry.Schema.Equals("dream_air_tracking.model_registry.v1", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("Downloaded model_registry.json is invalid.");
+        }
+
+        return registry;
+    }
+
+    private static async Task DownloadFileAsync(
+        string remotePath,
+        string revision,
+        string downloadRoot,
         CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        using var response = await Http.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+        var targetPath = Path.Combine(downloadRoot, remotePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        using var response = await Http.GetAsync(ResolveUrl(remotePath, revision), HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength;
         await using var remote = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var local = File.Create(zipPath);
-
-        var buffer = new byte[1024 * 128];
-        long readTotal = 0;
-        while (true)
+        await using var local = File.Create(targetPath);
+        await remote.CopyToAsync(local, cancellationToken);
+        if (local.Length == 0)
         {
-            var read = await remote.ReadAsync(buffer, cancellationToken);
-            if (read == 0)
-            {
-                break;
-            }
-
-            await local.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-            readTotal += read;
-            double? fraction = totalBytes is > 0 ? (double)readTotal / totalBytes.Value : null;
-            progress?.Report(new ModelDownloadProgress("download", fraction, $"Downloading model package {FormatBytes(readTotal)}..."));
-        }
-
-        if (readTotal == 0)
-        {
-            throw new InvalidDataException("Downloaded file is empty.");
+            throw new InvalidDataException($"Downloaded file is empty: {remotePath}.");
         }
     }
 
-    private static void ValidatePackage(string packageRoot)
+    private static void ValidateDownloadedPackage(string downloadRoot, ModelRegistryEntry entry)
     {
-        var registryPath = Path.Combine(packageRoot, "model_registry.json");
-        if (!File.Exists(registryPath))
-        {
-            throw new InvalidDataException("Missing model_registry.json.");
-        }
-
-        var registry = ModelRegistry.TryLoad(registryPath, Directory.GetParent(packageRoot)?.FullName);
-        if (registry is null || registry.Models.Count == 0)
-        {
-            throw new InvalidDataException("Downloaded model_registry.json is invalid or empty.");
-        }
-
-        foreach (var model in registry.Models)
-        {
-            RequirePackageFile(packageRoot, model.Onnx, "model.onnx");
-            RequirePackageFile(packageRoot, model.Metadata, "metadata.json");
-            RequirePackageFile(packageRoot, model.RuntimeDefaults, "runtime_defaults.json");
-            RequirePackageFile(packageRoot, model.Acceptance, "acceptance.json");
-        }
+        RequireDownloadedFile(downloadRoot, entry.Onnx, "model.onnx");
+        RequireDownloadedFile(downloadRoot, entry.Metadata, "metadata.json");
+        RequireDownloadedFile(downloadRoot, entry.RuntimeDefaults, "runtime_defaults.json");
+        RequireDownloadedFile(downloadRoot, entry.Acceptance, "acceptance.json");
     }
 
-    private static void RequirePackageFile(string packageRoot, string registryPath, string label)
+    private static void RequireDownloadedFile(string downloadRoot, string registryPath, string label)
     {
-        if (string.IsNullOrWhiteSpace(registryPath))
+        var remotePath = RemotePath(registryPath);
+        if (string.IsNullOrWhiteSpace(remotePath))
         {
             throw new InvalidDataException($"Model registry is missing {label} path.");
         }
 
-        var relative = StripModelsPrefix(registryPath);
-        var filePath = Path.Combine(packageRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+        var filePath = Path.Combine(downloadRoot, remotePath.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(filePath))
         {
-            throw new InvalidDataException($"Missing {label}: {relative}.");
+            throw new InvalidDataException($"Missing {label}: {remotePath}.");
         }
     }
 
-    private static void InstallPackage(string packageRoot, string modelRoot)
+    private void InstallDownloadedPackage(string downloadRoot, ModelRegistryEntry entry)
     {
-        Directory.CreateDirectory(modelRoot);
-        var registrySource = Path.Combine(packageRoot, "model_registry.json");
-        var registryTarget = Path.Combine(modelRoot, "model_registry.json");
-        var registryTemp = Path.Combine(modelRoot, "model_registry.json.tmp");
-
-        foreach (var entry in Directory.EnumerateFileSystemEntries(packageRoot))
+        foreach (var path in Directory.EnumerateFiles(downloadRoot, "*", SearchOption.AllDirectories))
         {
-            var name = Path.GetFileName(entry);
-            if (name.Equals("model_registry.json", StringComparison.OrdinalIgnoreCase))
+            var relative = Path.GetRelativePath(downloadRoot, path);
+            var target = Path.Combine(ModelRoot, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(path, target, overwrite: true);
+        }
+
+        var registryPath = ModelRegistry.DefaultUserRegistryPath();
+        var existing = ModelRegistry.TryLoad(registryPath);
+        var registry = new ModelRegistry();
+        if (existing is not null)
+        {
+            registry.Models.AddRange(existing.Models.Where(model =>
+                !model.Id.Equals(entry.Id, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        var installedEntry = CloneRegistryEntry(entry);
+        registry.Models.Add(installedEntry);
+        if (installedEntry.Role.Equals("main", StringComparison.OrdinalIgnoreCase) && installedEntry.Default)
+        {
+            foreach (var otherMain in registry.Models.Where(model =>
+                         !model.Id.Equals(installedEntry.Id, StringComparison.OrdinalIgnoreCase) &&
+                         model.Role.Equals("main", StringComparison.OrdinalIgnoreCase)))
             {
-                continue;
+                otherMain.Default = false;
             }
+        }
 
-            var target = Path.Combine(modelRoot, name);
-            if (Directory.Exists(entry))
+        if (!registry.Models.Any(model => model.Role.Equals("main", StringComparison.OrdinalIgnoreCase) && model.Default))
+        {
+            var firstMain = registry.Models.FirstOrDefault(model => model.Role.Equals("main", StringComparison.OrdinalIgnoreCase));
+            if (firstMain is not null)
             {
-                CopyDirectory(entry, target);
+                firstMain.Default = true;
             }
-            else
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(registryPath)!);
+        var tempPath = registryPath + ".tmp";
+        var json = JsonSerializer.Serialize(registry, AppJsonOptions.Web());
+        File.WriteAllText(tempPath, json);
+        File.Copy(tempPath, registryPath, overwrite: true);
+        File.Delete(tempPath);
+    }
+
+    private static ModelRegistryEntry CloneRegistryEntry(ModelRegistryEntry entry)
+        => new()
+        {
+            Id = entry.Id,
+            DisplayName = entry.DisplayName,
+            DeviceFamily = entry.DeviceFamily,
+            Role = entry.Role,
+            Architecture = entry.Architecture,
+            Runtime = entry.Runtime,
+            Onnx = entry.Onnx,
+            Metadata = entry.Metadata,
+            RuntimeDefaults = entry.RuntimeDefaults,
+            Acceptance = entry.Acceptance,
+            Outputs = entry.Outputs.ToList(),
+            Default = entry.Default
+        };
+
+    private static bool IsInstalledModelComplete(ModelRegistryEntry model)
+        => File.Exists(model.ResolvedOnnx) &&
+           File.Exists(model.ResolvedMetadata) &&
+           File.Exists(model.ResolvedRuntimeDefaults) &&
+           File.Exists(model.ResolvedAcceptance);
+
+    private static HashSet<string> ReadSiblingNames(JsonElement metadata)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!metadata.TryGetProperty("siblings", out var siblings) || siblings.ValueKind != JsonValueKind.Array)
+        {
+            return names;
+        }
+
+        foreach (var sibling in siblings.EnumerateArray())
+        {
+            if (sibling.TryGetProperty("rfilename", out var nameProperty) &&
+                !string.IsNullOrWhiteSpace(nameProperty.GetString()))
             {
-                File.Copy(entry, target, overwrite: true);
+                names.Add(nameProperty.GetString()!);
             }
         }
 
-        File.Copy(registrySource, registryTemp, overwrite: true);
-        File.Copy(registryTemp, registryTarget, overwrite: true);
-        File.Delete(registryTemp);
+        return names;
     }
 
-    private static void CopyDirectory(string source, string target)
+    private static string ResolveUrl(string remotePath, string revision)
+        => $"https://huggingface.co/{DefaultRepoId}/resolve/{Uri.EscapeDataString(revision)}/{EscapeRemotePath(remotePath)}";
+
+    private static string EscapeRemotePath(string remotePath)
+        => string.Join("/", remotePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
+
+    private static string RemotePath(string registryPath)
     {
-        Directory.CreateDirectory(target);
-        foreach (var file in Directory.EnumerateFiles(source))
-        {
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
-        }
-
-        foreach (var directory in Directory.EnumerateDirectories(source))
-        {
-            CopyDirectory(directory, Path.Combine(target, Path.GetFileName(directory)));
-        }
-    }
-
-    private static string FindExtractedPackageRoot(string extractPath)
-    {
-        if (File.Exists(Path.Combine(extractPath, "model_registry.json")))
-        {
-            return extractPath;
-        }
-
-        var child = Directory.EnumerateDirectories(extractPath).FirstOrDefault(directory =>
-            File.Exists(Path.Combine(directory, "model_registry.json")));
-        if (child is null)
-        {
-            throw new InvalidDataException("Downloaded archive does not contain model_registry.json.");
-        }
-
-        return child;
-    }
-
-    private static string StripModelsPrefix(string path)
-    {
-        var normalized = path.Replace('\\', '/').TrimStart('/');
+        var normalized = registryPath.Replace('\\', '/').TrimStart('/');
         return normalized.StartsWith("models/", StringComparison.OrdinalIgnoreCase)
             ? normalized["models/".Length..]
             : normalized;
     }
+
+    private static string ShortRevision(string revision)
+        => revision.Length <= 8 ? revision : revision[..8];
 
     private static async Task WriteStatusAsync(string path, object payload, CancellationToken cancellationToken)
     {
@@ -294,9 +420,6 @@ public sealed class HuggingFaceModelDownloadService
         var json = JsonSerializer.Serialize(payload, AppJsonOptions.Web());
         await File.WriteAllTextAsync(path, json, cancellationToken);
     }
-
-    private static string BuildArchiveUrl(string repoId, string revision)
-        => $"https://huggingface.co/{repoId}/archive/{Uri.EscapeDataString(revision)}.zip";
 
     private static HttpClient CreateHttpClient()
     {
@@ -306,35 +429,6 @@ public sealed class HuggingFaceModelDownloadService
         };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("DreamAirTracking/0.1");
         return client;
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes >= 1024L * 1024L)
-        {
-            return $"{bytes / 1024d / 1024d:0.0} MB";
-        }
-
-        if (bytes >= 1024)
-        {
-            return $"{bytes / 1024d:0.0} KB";
-        }
-
-        return $"{bytes} B";
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch
-        {
-        }
     }
 
     private static void TryDeleteDirectory(string path)

@@ -85,6 +85,9 @@ public sealed partial class MainWindow : Window
                 case "pipeline":
                     NavFrame.Navigate(typeof(PipelineDiagnosticsPage));
                     break;
+                case "models":
+                    NavFrame.Navigate(typeof(ModelsPage));
+                    break;
                 case "about":
                     NavFrame.Navigate(typeof(AboutPage));
                     break;

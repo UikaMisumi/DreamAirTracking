@@ -14,11 +14,56 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Settings" />
-        <StackPanel Grid.Row="1" MaxWidth="560" Spacing="16" HorizontalAlignment="Left">
+        <StackPanel Grid.Row="1" MaxWidth="720" Spacing="18" HorizontalAlignment="Left">
             <TextBox Header="BrokenEye host" Text="127.0.0.1" />
             <NumberBox Header="BrokenEye HTTP port" Value="5555" Minimum="1" Maximum="65535" />
             <NumberBox Header="VRCFT UDP port" Value="9400" Minimum="1" Maximum="65535" />
             <TextBox Header="Current profile" Text="tracking_profile_final.json" />
+
+            <Border Padding="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="12">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Models" />
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Install the public Dream Air model package from Hugging Face. Installed packages still appear in the Home model picker." TextWrapping="Wrap" />
+                    <TextBox
+                        Header="Hugging Face source"
+                        IsReadOnly="True"
+                        Text="Sumirui/dreamairtracking-dreamair-main-current" />
+                    <TextBox
+                        x:Name="ModelFolderTextBox"
+                        Header="Local model folder"
+                        IsReadOnly="True" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button
+                            x:Name="DownloadModelButton"
+                            Content="Download latest model"
+                            Click="DownloadModel_Click" />
+                        <Button
+                            x:Name="CancelModelDownloadButton"
+                            Content="Cancel"
+                            Click="CancelModelDownload_Click"
+                            Visibility="Collapsed" />
+                        <Button Content="Open model folder" Click="OpenModelFolder_Click" />
+                    </StackPanel>
+                    <InfoBar
+                        x:Name="ModelDownloadInfoBar"
+                        IsOpen="False"
+                        Severity="Informational"
+                        Title="Model download">
+                        <StackPanel Spacing="8">
+                            <TextBlock
+                                x:Name="ModelDownloadMessageText"
+                                Text="Ready"
+                                TextWrapping="Wrap" />
+                            <ProgressBar
+                                x:Name="ModelDownloadProgressBar"
+                                Height="6"
+                                IsIndeterminate="True"
+                                Maximum="1"
+                                Minimum="0" />
+                        </StackPanel>
+                    </InfoBar>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </Grid>
 </Page>

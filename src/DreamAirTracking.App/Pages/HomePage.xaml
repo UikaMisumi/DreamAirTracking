@@ -16,6 +16,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <StackPanel Spacing="4">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Eye Tracking" />
@@ -49,10 +50,32 @@
             </CommandBar.Content>
             <AppBarButton x:Name="StartBridgeButton" Icon="Play" Label="Start Eye Tracking" Click="StartBridge_Click" />
             <AppBarButton x:Name="StopBridgeButton" Icon="Stop" Label="Stop Eye Tracking" Click="StopBridge_Click" />
+            <AppBarButton x:Name="InstallModelButton" Icon="Download" Label="Install Model" Click="InstallModel_Click" />
+            <AppBarButton x:Name="CancelModelDownloadButton" Icon="Cancel" Label="Cancel Download" Click="CancelModelDownload_Click" Visibility="Collapsed" />
             <AppBarButton Icon="Refresh" Label="Refresh" Click="Refresh_Click" />
         </CommandBar>
 
-        <Grid Grid.Row="3" ColumnSpacing="16">
+        <InfoBar
+            x:Name="ModelDownloadInfoBar"
+            Grid.Row="3"
+            IsOpen="False"
+            Severity="Informational"
+            Title="Model download">
+            <StackPanel Spacing="8">
+                <TextBlock
+                    x:Name="ModelDownloadMessageText"
+                    Text="Ready"
+                    TextWrapping="Wrap" />
+                <ProgressBar
+                    x:Name="ModelDownloadProgressBar"
+                    Height="6"
+                    IsIndeterminate="True"
+                    Maximum="1"
+                    Minimum="0" />
+            </StackPanel>
+        </InfoBar>
+
+        <Grid Grid.Row="4" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />

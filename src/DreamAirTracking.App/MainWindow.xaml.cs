@@ -1,4 +1,3 @@
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using DreamAirTracking.App.Pages;
@@ -16,10 +15,6 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(AppTitleBar);
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-        AppWindow.SetIcon("Assets/AppIcon.ico");
         NavFrame.Navigate(typeof(HomePage));
     }
 
@@ -56,41 +51,32 @@ public sealed partial class MainWindow : Window
         CalibrationOverlayCancelRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void TitleBar_PaneToggleRequested(TitleBar sender, object args)
+    private void NavButton_Click(object sender, RoutedEventArgs e)
     {
-        NavView.IsPaneOpen = !NavView.IsPaneOpen;
-    }
-
-    private void TitleBar_BackRequested(TitleBar sender, object args)
-    {
-        NavFrame.GoBack();
-    }
-
-    private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        if (args.IsSettingsSelected)
+        if (sender is not Button { Tag: string tag })
         {
-            NavFrame.Navigate(typeof(SettingsPage));
+            return;
         }
-        else if (args.SelectedItem is NavigationViewItem item)
+
+        switch (tag)
         {
-            switch (item.Tag)
-            {
-                case "home":
-                    NavFrame.Navigate(typeof(HomePage));
-                    break;
-                case "calibration":
-                    NavFrame.Navigate(typeof(CalibrationPage));
-                    break;
-                case "pipeline":
-                    NavFrame.Navigate(typeof(PipelineDiagnosticsPage));
-                    break;
-                case "about":
-                    NavFrame.Navigate(typeof(AboutPage));
-                    break;
-                default:
-                    throw new InvalidOperationException($"Unknown navigation item tag: {item.Tag}");
-            }
+            case "home":
+                NavFrame.Navigate(typeof(HomePage));
+                break;
+            case "calibration":
+                NavFrame.Navigate(typeof(CalibrationPage));
+                break;
+            case "pipeline":
+                NavFrame.Navigate(typeof(PipelineDiagnosticsPage));
+                break;
+            case "about":
+                NavFrame.Navigate(typeof(AboutPage));
+                break;
+            case "settings":
+                NavFrame.Navigate(typeof(SettingsPage));
+                break;
+            default:
+                throw new InvalidOperationException($"Unknown navigation item tag: {tag}");
         }
     }
 }

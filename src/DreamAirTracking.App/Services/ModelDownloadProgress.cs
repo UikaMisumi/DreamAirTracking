@@ -20,7 +20,8 @@ public sealed record RemoteModelPackage(
     string Id,
     string DisplayName,
     string Version,
-    string Role,
+    string MainModelId,
+    string? ExpressionModelId,
     string Runtime,
     string Architecture,
     string Revision,
@@ -31,8 +32,9 @@ public sealed record RemoteModelPackage(
 public sealed record InstalledModelPackage(
     string Id,
     string DisplayName,
-    string Role,
+    string Version,
     string Runtime,
-    string OnnxPath,
+    string MainOnnxPath,
+    string? ExpressionOnnxPath,
     bool IsComplete,
     bool IsDefault);

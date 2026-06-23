@@ -38,7 +38,7 @@ public sealed partial class ModelsPage : Page
             ShowStatus(
                 InfoBarSeverity.Success,
                 "Remote models loaded",
-                $"Loaded {_catalog.Packages.Count} model package(s) from Hugging Face.",
+                $"Loaded {_catalog.Packages.Count} paired model version(s) from Hugging Face.",
                 null,
                 false);
         }
@@ -132,7 +132,7 @@ public sealed partial class ModelsPage : Page
             .ToDictionary(model => model.Id, StringComparer.OrdinalIgnoreCase);
         foreach (var package in _catalog.Packages)
         {
-            RemotePackagesList.Items.Add(BuildRemotePackageItem(package, installed.ContainsKey(package.Id)));
+            RemotePackagesList.Items.Add(BuildRemotePackageItem(package, installed.ContainsKey(package.MainModelId)));
         }
     }
 
@@ -154,7 +154,7 @@ public sealed partial class ModelsPage : Page
         });
         text.Children.Add(new TextBlock
         {
-            Text = $"Version {package.Version}  |  role={package.Role}  |  files={package.Files.Count}",
+            Text = $"Paired main + expression package  |  files={package.Files.Count}",
             Foreground = SecondaryBrush(),
             TextWrapping = TextWrapping.Wrap
         });
@@ -187,7 +187,7 @@ public sealed partial class ModelsPage : Page
         var installed = HuggingFaceModelDownloadService.Instance.LoadInstalledPackages();
         InstalledSummaryText.Text = installed.Count == 0
             ? "No model package installed. Refresh remote list, then download a model."
-            : $"{installed.Count} installed model package(s). Select one on Home before starting eye tracking.";
+            : $"{installed.Count} installed paired model version(s). Select one on Home before starting eye tracking.";
         foreach (var package in installed)
         {
             InstalledPackagesList.Items.Add(BuildInstalledPackageItem(package));
@@ -208,14 +208,22 @@ public sealed partial class ModelsPage : Page
         });
         root.Children.Add(new TextBlock
         {
-            Text = $"id={package.Id}  |  role={package.Role}  |  status={(package.IsComplete ? "ready" : "missing files")}{(package.IsDefault ? "  |  default" : string.Empty)}",
+            Text = $"status={(package.IsComplete ? "ready" : "missing files")}{(package.IsDefault ? "  |  default" : string.Empty)}",
             TextWrapping = TextWrapping.Wrap
         });
         root.Children.Add(new TextBlock
         {
-            Text = package.OnnxPath,
+            Text = $"main: {package.MainOnnxPath}",
             TextWrapping = TextWrapping.Wrap
         });
+        if (!string.IsNullOrWhiteSpace(package.ExpressionOnnxPath))
+        {
+            root.Children.Add(new TextBlock
+            {
+                Text = $"expression: {package.ExpressionOnnxPath}",
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
         return new ListViewItem { Content = root };
     }
 

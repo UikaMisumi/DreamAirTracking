@@ -48,12 +48,10 @@ public sealed class HuggingFaceModelDownloadService
 
         var registry = await DownloadRegistryAsync(revision, cancellationToken);
         var siblingNames = ReadSiblingNames(metadata);
-        var packages = registry.Models
-            .Where(model =>
-                model.DeviceFamily.Equals("Dream Air", StringComparison.OrdinalIgnoreCase) &&
-                model.Runtime.Equals("predict_live_multitask", StringComparison.OrdinalIgnoreCase))
-            .Select(model => CreateRemotePackage(model, revision, lastModified, siblingNames))
-            .ToArray();
+        var package = CreateRemotePackage(registry, revision, lastModified, siblingNames);
+        var packages = package is null
+            ? Array.Empty<RemoteModelPackage>()
+            : new[] { package };
 
         if (packages.Length == 0)
         {
@@ -71,17 +69,20 @@ public sealed class HuggingFaceModelDownloadService
             return Array.Empty<InstalledModelPackage>();
         }
 
+        var expression = registry.FindDefaultExpression();
         return registry.Models
             .Where(model =>
                 model.DeviceFamily.Equals("Dream Air", StringComparison.OrdinalIgnoreCase) &&
-                model.Runtime.Equals("predict_live_multitask", StringComparison.OrdinalIgnoreCase))
+                model.Runtime.Equals("predict_live_multitask", StringComparison.OrdinalIgnoreCase) &&
+                model.Role.Equals("main", StringComparison.OrdinalIgnoreCase))
             .Select(model => new InstalledModelPackage(
                 model.Id,
-                model.DisplayName,
-                model.Role,
+                VersionLabel(model),
+                VersionLabel(model),
                 model.Runtime,
                 model.ResolvedOnnx,
-                IsInstalledModelComplete(model),
+                expression?.ResolvedOnnx,
+                IsInstalledModelComplete(model) && expression is not null && IsInstalledModelComplete(expression),
                 model.Default))
             .ToArray();
     }
@@ -110,8 +111,15 @@ public sealed class HuggingFaceModelDownloadService
 
             progress?.Report(new ModelDownloadProgress("download", 0, $"Downloading {package.DisplayName}..."));
             var remoteRegistry = await DownloadRegistryAsync(package.Revision, cancellationToken);
-            var selectedEntry = remoteRegistry.FindById(package.Id)
-                ?? throw new InvalidDataException($"Remote registry no longer contains {package.Id}.");
+            var selectedMain = remoteRegistry.FindById(package.MainModelId)
+                ?? throw new InvalidDataException($"Remote registry no longer contains {package.MainModelId}.");
+            var selectedExpression = string.IsNullOrWhiteSpace(package.ExpressionModelId)
+                ? remoteRegistry.FindDefaultExpression()
+                : remoteRegistry.FindById(package.ExpressionModelId);
+            if (selectedExpression is null)
+            {
+                throw new InvalidDataException("Remote registry does not contain the paired expression model.");
+            }
 
             var files = package.Files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             for (var index = 0; index < files.Length; index++)
@@ -123,9 +131,10 @@ public sealed class HuggingFaceModelDownloadService
                 await DownloadFileAsync(file, package.Revision, downloadRoot, cancellationToken);
             }
 
-            ValidateDownloadedPackage(downloadRoot, selectedEntry);
+            ValidateDownloadedPackage(downloadRoot, selectedMain);
+            ValidateDownloadedPackage(downloadRoot, selectedExpression);
             progress?.Report(new ModelDownloadProgress("install", null, "Installing model package..."));
-            InstallDownloadedPackage(downloadRoot, selectedEntry);
+            InstallDownloadedPackage(downloadRoot, package, selectedMain, selectedExpression);
 
             var statusPath = Path.Combine(appData, "model_download_status.json");
             await WriteStatusAsync(statusPath, new
@@ -133,8 +142,10 @@ public sealed class HuggingFaceModelDownloadService
                 state = "installed",
                 repoId = DefaultRepoId,
                 revision = package.Revision,
-                modelId = package.Id,
+                packageId = package.Id,
                 modelDisplayName = package.DisplayName,
+                mainModelId = selectedMain.Id,
+                expressionModelId = selectedExpression.Id,
                 installedRegistryPath = Path.Combine(ModelRoot, "model_registry.json"),
                 timeUtc = DateTime.UtcNow
             }, cancellationToken);
@@ -142,7 +153,7 @@ public sealed class HuggingFaceModelDownloadService
             progress?.Report(new ModelDownloadProgress("done", 1, $"{package.DisplayName} installed."));
             return new ModelDownloadResult(
                 true,
-                $"{package.DisplayName} installed. Select it from Home -> Model package.",
+                $"{package.DisplayName} installed. Select this version from Home -> Model package.",
                 Path.Combine(ModelRoot, "model_registry.json"));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -192,7 +203,7 @@ public sealed class HuggingFaceModelDownloadService
                 state = "failed",
                 repoId = DefaultRepoId,
                 revision = package.Revision,
-                modelId = package.Id,
+                packageId = package.Id,
                 errorCode,
                 message,
                 currentModelPreserved = true,
@@ -203,41 +214,53 @@ public sealed class HuggingFaceModelDownloadService
         }
     }
 
-    private static RemoteModelPackage CreateRemotePackage(
-        ModelRegistryEntry model,
+    private static RemoteModelPackage? CreateRemotePackage(
+        ModelRegistry registry,
         string revision,
         DateTimeOffset? lastModified,
         HashSet<string> siblingNames)
     {
-        var files = new List<string>
+        var main = registry.FindDefaultMain();
+        var expression = registry.FindDefaultExpression();
+        if (main is null || expression is null)
         {
-            RemotePath(model.Onnx),
-            RemotePath(model.Metadata),
-            RemotePath(model.RuntimeDefaults),
-            RemotePath(model.Acceptance)
-        };
-        var modelCard = Path.Combine(Path.GetDirectoryName(RemotePath(model.Onnx)) ?? string.Empty, "model_card.md")
-            .Replace('\\', '/');
-        if (siblingNames.Contains(modelCard))
-        {
-            files.Add(modelCard);
+            return null;
         }
+
+        var files = new List<string>();
+        AddModelFiles(files, main, siblingNames);
+        AddModelFiles(files, expression, siblingNames);
 
         var version = lastModified is null
             ? $"revision {ShortRevision(revision)}"
             : $"{lastModified.Value:yyyy.MM.dd} ({ShortRevision(revision)})";
 
         return new RemoteModelPackage(
-            model.Id,
-            model.DisplayName,
+            $"{main.Id}+{expression.Id}@{ShortRevision(revision)}",
             version,
-            model.Role,
-            model.Runtime,
-            model.Architecture,
+            version,
+            main.Id,
+            expression.Id,
+            main.Runtime,
+            $"{main.Architecture} + expression auxiliary",
             revision,
             lastModified,
-            model.Outputs,
+            main.Outputs.Concat(expression.Outputs).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             files.Where(file => !string.IsNullOrWhiteSpace(file)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    private static void AddModelFiles(List<string> files, ModelRegistryEntry model, HashSet<string> siblingNames)
+    {
+        files.Add(RemotePath(model.Onnx));
+        files.Add(RemotePath(model.Metadata));
+        files.Add(RemotePath(model.RuntimeDefaults));
+        files.Add(RemotePath(model.Acceptance));
+        var modelCard = Path.Combine(Path.GetDirectoryName(RemotePath(model.Onnx)) ?? string.Empty, "model_card.md")
+            .Replace('\\', '/');
+        if (siblingNames.Contains(modelCard))
+        {
+            files.Add(modelCard);
+        }
     }
 
     private static async Task<JsonDocument> GetJsonAsync(string url, CancellationToken cancellationToken)
@@ -306,7 +329,11 @@ public sealed class HuggingFaceModelDownloadService
         }
     }
 
-    private void InstallDownloadedPackage(string downloadRoot, ModelRegistryEntry entry)
+    private void InstallDownloadedPackage(
+        string downloadRoot,
+        RemoteModelPackage package,
+        ModelRegistryEntry mainEntry,
+        ModelRegistryEntry expressionEntry)
     {
         foreach (var path in Directory.EnumerateFiles(downloadRoot, "*", SearchOption.AllDirectories))
         {
@@ -316,36 +343,17 @@ public sealed class HuggingFaceModelDownloadService
             File.Copy(path, target, overwrite: true);
         }
 
-        var registryPath = ModelRegistry.DefaultUserRegistryPath();
-        var existing = ModelRegistry.TryLoad(registryPath);
         var registry = new ModelRegistry();
-        if (existing is not null)
-        {
-            registry.Models.AddRange(existing.Models.Where(model =>
-                !model.Id.Equals(entry.Id, StringComparison.OrdinalIgnoreCase)));
-        }
+        var installedMain = CloneRegistryEntry(mainEntry);
+        installedMain.DisplayName = package.DisplayName;
+        installedMain.Default = true;
+        var installedExpression = CloneRegistryEntry(expressionEntry);
+        installedExpression.DisplayName = package.DisplayName;
+        installedExpression.Default = true;
+        registry.Models.Add(installedMain);
+        registry.Models.Add(installedExpression);
 
-        var installedEntry = CloneRegistryEntry(entry);
-        registry.Models.Add(installedEntry);
-        if (installedEntry.Role.Equals("main", StringComparison.OrdinalIgnoreCase) && installedEntry.Default)
-        {
-            foreach (var otherMain in registry.Models.Where(model =>
-                         !model.Id.Equals(installedEntry.Id, StringComparison.OrdinalIgnoreCase) &&
-                         model.Role.Equals("main", StringComparison.OrdinalIgnoreCase)))
-            {
-                otherMain.Default = false;
-            }
-        }
-
-        if (!registry.Models.Any(model => model.Role.Equals("main", StringComparison.OrdinalIgnoreCase) && model.Default))
-        {
-            var firstMain = registry.Models.FirstOrDefault(model => model.Role.Equals("main", StringComparison.OrdinalIgnoreCase));
-            if (firstMain is not null)
-            {
-                firstMain.Default = true;
-            }
-        }
-
+        var registryPath = ModelRegistry.DefaultUserRegistryPath();
         Directory.CreateDirectory(Path.GetDirectoryName(registryPath)!);
         var tempPath = registryPath + ".tmp";
         var json = JsonSerializer.Serialize(registry, AppJsonOptions.Web());
@@ -376,6 +384,11 @@ public sealed class HuggingFaceModelDownloadService
            File.Exists(model.ResolvedMetadata) &&
            File.Exists(model.ResolvedRuntimeDefaults) &&
            File.Exists(model.ResolvedAcceptance);
+
+    private static string VersionLabel(ModelRegistryEntry model)
+        => string.IsNullOrWhiteSpace(model.DisplayName)
+            ? model.Id
+            : model.DisplayName;
 
     private static HashSet<string> ReadSiblingNames(JsonElement metadata)
     {

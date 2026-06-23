@@ -1094,12 +1094,21 @@ public sealed partial class CalibrationPage : Page
             EmaAlpha = existing.EmaAlpha,
             MaxStep = existing.MaxStep,
             OpennessMode = existing.OpennessMode,
+            OpennessCurveMode = existing.OpennessCurveMode,
             OpennessCalibrationPath = string.IsNullOrWhiteSpace(OpennessCalibrationPathBox.Text)
                 ? null
                 : OpennessCalibrationPathBox.Text.Trim(),
             OpennessBoostGamma = existing.OpennessBoostGamma,
             OpennessFullOpenThreshold = existing.OpennessFullOpenThreshold,
             OpennessBoostKnee = existing.OpennessBoostKnee,
+            EyeShapeWideScale = existing.EyeShapeWideScale,
+            EyeShapeSquintScale = existing.EyeShapeSquintScale,
+            EyeShapeGamma = existing.EyeShapeGamma,
+            EyeShapeDeadzone = existing.EyeShapeDeadzone,
+            PupilWideEnterThreshold = existing.PupilWideEnterThreshold,
+            PupilWideExitThreshold = existing.PupilWideExitThreshold,
+            PupilWideHoldFrames = existing.PupilWideHoldFrames,
+            PupilWideEmaAlpha = existing.PupilWideEmaAlpha,
             NormalizationMode = existing.NormalizationMode,
             NormalizationTargetX = existing.NormalizationTargetX,
             NormalizationTargetY = existing.NormalizationTargetY,
@@ -1476,13 +1485,14 @@ public sealed partial class CalibrationPage : Page
                 AlgorithmText.Text = string.IsNullOrWhiteSpace(bridge.Options.OpennessCalibrationPath)
                     ? "Eyelid: no saved calibration"
                     : $"Eyelid: {IOPath.GetFileName(bridge.Options.OpennessCalibrationPath)}";
-                AutoMapText.Text = $"Curve gamma {bridge.Options.OpennessBoostGamma:0.00}, full-open {bridge.Options.OpennessFullOpenThreshold:0.00}, knee {bridge.Options.OpennessBoostKnee:0.00}";
+                AutoMapText.Text = $"Curve {bridge.Options.OpennessCurveMode}, full-open {bridge.Options.OpennessFullOpenThreshold:0.00}, knee {bridge.Options.OpennessBoostKnee:0.00}, gamma {bridge.Options.OpennessBoostGamma:0.00}";
                 break;
             case "pupil":
                 AlgorithmText.Text = $"Pupil: {GetPupilOutputMode()}";
                 AutoMapText.Text = string.IsNullOrWhiteSpace(bridge.Options.PupilCalibrationPath)
                     ? "Pupil: no saved diameter calibration"
                     : $"Pupil: {IOPath.GetFileName(bridge.Options.PupilCalibrationPath)}";
+                AutoMapText.Text += $"; wide enter {bridge.Options.PupilWideEnterThreshold:0.00}, exit {bridge.Options.PupilWideExitThreshold:0.00}";
                 break;
             default:
                 AlgorithmText.Text = _hasLiveData && _liveStageId is not null

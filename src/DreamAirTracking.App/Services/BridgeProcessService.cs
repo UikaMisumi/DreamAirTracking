@@ -514,6 +514,14 @@ public sealed class BridgeProcessService
         {
             startInfo.ArgumentList.Add("--pupil-output-mode");
             startInfo.ArgumentList.Add(ResolvePupilOutputMode());
+            startInfo.ArgumentList.Add("--pupil-wide-enter-threshold");
+            startInfo.ArgumentList.Add(Format(Options.PupilWideEnterThreshold));
+            startInfo.ArgumentList.Add("--pupil-wide-exit-threshold");
+            startInfo.ArgumentList.Add(Format(Options.PupilWideExitThreshold));
+            startInfo.ArgumentList.Add("--pupil-wide-hold-frames");
+            startInfo.ArgumentList.Add(Math.Max(0, Options.PupilWideHoldFrames).ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add("--pupil-wide-ema-alpha");
+            startInfo.ArgumentList.Add(Format(Options.PupilWideEmaAlpha));
             startInfo.ArgumentList.Add("--eye-expression-mode");
             startInfo.ArgumentList.Add(Options.EnableVrcftEyeExpressions ? "steamlink_eye_shapes" : "off");
             startInfo.ArgumentList.Add("--wide-source");
@@ -531,7 +539,7 @@ public sealed class BridgeProcessService
             startInfo.ArgumentList.Add("--eye-shape-deadzone");
             startInfo.ArgumentList.Add(Format(Options.EyeShapeDeadzone));
             startInfo.ArgumentList.Add("--openness-curve-mode");
-            startInfo.ArgumentList.Add("blink_s_curve");
+            startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(Options.OpennessCurveMode) ? "soft_open_plateau" : Options.OpennessCurveMode);
             startInfo.ArgumentList.Add("--openness-full-open-threshold");
             startInfo.ArgumentList.Add(Format(Options.OpennessFullOpenThreshold));
             startInfo.ArgumentList.Add("--openness-boost-knee");
@@ -1132,11 +1140,40 @@ public sealed class BridgeProcessService
                 && IsNear(options.OpennessBoostGamma, 1.8))
             || (IsNear(options.OpennessFullOpenThreshold, 0.82)
                 && IsNear(options.OpennessBoostKnee, 0.25)
-                && IsNear(options.OpennessBoostGamma, 0.75)))
+                && IsNear(options.OpennessBoostGamma, 0.75))
+            || (IsNear(options.OpennessFullOpenThreshold, 0.90)
+                && IsNear(options.OpennessBoostKnee, 0.28)
+                && IsNear(options.OpennessBoostGamma, 1.25)))
         {
+            options.OpennessCurveMode = "blink_s_curve";
             options.OpennessFullOpenThreshold = 0.90;
             options.OpennessBoostKnee = 0.28;
             options.OpennessBoostGamma = 1.25;
+        }
+
+        if (string.Equals(options.OpennessCurveMode, "soft_open_plateau", StringComparison.OrdinalIgnoreCase)
+            && IsNear(options.OpennessFullOpenThreshold, 0.93)
+            && IsNear(options.OpennessBoostKnee, 0.28)
+            && IsNear(options.OpennessBoostGamma, 1.0))
+        {
+            options.OpennessCurveMode = "blink_s_curve";
+            options.OpennessFullOpenThreshold = 0.90;
+            options.OpennessBoostKnee = 0.28;
+            options.OpennessBoostGamma = 1.25;
+        }
+
+        if (string.Equals(options.OpennessCurveMode, "blink_s_curve", StringComparison.OrdinalIgnoreCase)
+            && IsNear(options.OpennessFullOpenThreshold, 0.90)
+            && IsNear(options.OpennessBoostKnee, 0.80)
+            && IsNear(options.OpennessBoostGamma, 1.0))
+        {
+            options.OpennessBoostKnee = 0.28;
+            options.OpennessBoostGamma = 1.25;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.OpennessCurveMode))
+        {
+            options.OpennessCurveMode = "blink_s_curve";
         }
 
         options.OpennessFullOpenThreshold = Clamp(options.OpennessFullOpenThreshold, 0.55, 1.0, 0.90);
@@ -1150,6 +1187,25 @@ public sealed class BridgeProcessService
         options.EyeShapeSquintScale = Clamp(options.EyeShapeSquintScale, 0.0, 1.0, 0.55);
         options.EyeShapeGamma = Clamp(options.EyeShapeGamma, 0.05, 4.0, 1.15);
         options.EyeShapeDeadzone = Clamp(options.EyeShapeDeadzone, 0.0, 0.95, 0.03);
+        if (IsNear(options.PupilWideEnterThreshold, 0.75)
+            && IsNear(options.PupilWideExitThreshold, 0.40)
+            && options.PupilWideHoldFrames == 12
+            && IsNear(options.PupilWideEmaAlpha, 0.35))
+        {
+            options.PupilWideEnterThreshold = 0.90;
+            options.PupilWideExitThreshold = 0.86;
+            options.PupilWideHoldFrames = 8;
+            options.PupilWideEmaAlpha = 0.45;
+        }
+
+        options.PupilWideEnterThreshold = Clamp(options.PupilWideEnterThreshold, 0.0, 1.0, 0.90);
+        options.PupilWideExitThreshold = Clamp(
+            options.PupilWideExitThreshold,
+            0.0,
+            Math.Min(1.0, options.PupilWideEnterThreshold),
+            0.86);
+        options.PupilWideHoldFrames = Math.Clamp(options.PupilWideHoldFrames, 0, 90);
+        options.PupilWideEmaAlpha = Clamp(options.PupilWideEmaAlpha, 0.01, 1.0, 0.45);
 
         if (!IsFinite(options.VrcftOutputXGain) || Math.Abs(options.VrcftOutputXGain) < 0.000001)
         {

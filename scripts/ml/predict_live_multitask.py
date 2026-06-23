@@ -162,6 +162,11 @@ def apply_openness_curve(
     threshold = float(np.clip(full_open_threshold, 0.05, 1.0))
     knee = float(np.clip(boost_knee, 0.0, threshold - 0.001))
     gamma = max(0.05, float(boost_gamma))
+    if mode == "soft_open_plateau":
+        curved = np.power(values, gamma)
+        curved[values >= threshold] = 1.0
+        return np.clip(curved, 0.0, 1.0).astype(np.float32)
+
     if mode == "blink_s_curve":
         t = np.clip((values - knee) / max(0.001, threshold - knee), 0.0, 1.0)
         smoothstep = t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
@@ -246,6 +251,41 @@ def pupil_output_state(
         "expressionNormalized": PUPIL_NEUTRAL,
         "reason": "model-radius-debug",
     }
+
+
+def update_pupil_wide_state(
+    raw_wide: np.ndarray,
+    state: np.ndarray,
+    hold_remaining: np.ndarray,
+    enter_threshold: float,
+    exit_threshold: float,
+    hold_frames: int,
+    ema_alpha: float,
+) -> np.ndarray:
+    raw = np.clip(raw_wide.astype(np.float32), 0.0, 1.0)
+    enter = float(np.clip(enter_threshold, 0.0, 1.0))
+    exit_ = float(np.clip(exit_threshold, 0.0, enter))
+    frames = max(0, int(hold_frames))
+    alpha = float(np.clip(ema_alpha, 0.01, 1.0))
+    for index in range(2):
+        value = float(raw[index])
+        if value >= enter:
+            hold_remaining[index] = frames
+            target = clamp01((value - enter) / max(0.001, 1.0 - enter))
+        elif value <= exit_:
+            if hold_remaining[index] > 0:
+                hold_remaining[index] -= 1
+                target = float(state[index])
+            else:
+                target = 0.0
+        else:
+            if hold_remaining[index] > 0:
+                hold_remaining[index] -= 1
+                target = float(state[index])
+            else:
+                target = 0.0
+        state[index] = state[index] + alpha * (target - state[index])
+    return np.clip(state, 0.0, 1.0).astype(np.float32)
 
 
 def bridge_eye(
@@ -379,7 +419,11 @@ def main() -> int:
     parser.add_argument("--eye-shape-squint-scale", type=float, default=1.0, help="Scale applied only to VRCFT EyeSquint output.")
     parser.add_argument("--eye-shape-gamma", type=float, default=1.0, help="Gamma applied to VRCFT EyeWide/EyeSquint after deadzone.")
     parser.add_argument("--eye-shape-deadzone", type=float, default=0.0, help="Deadzone applied only to VRCFT EyeWide/EyeSquint.")
-    parser.add_argument("--openness-curve-mode", choices=("off", "full_open_plateau", "blink_s_curve"), default="blink_s_curve")
+    parser.add_argument("--pupil-wide-enter-threshold", type=float, default=0.90, help="Raw/model wide value that turns on pupil constriction assist.")
+    parser.add_argument("--pupil-wide-exit-threshold", type=float, default=0.86, help="Raw/model wide value below which pupil constriction assist fades out.")
+    parser.add_argument("--pupil-wide-hold-frames", type=int, default=8, help="Frames to hold pupil constriction assist after a wide trigger.")
+    parser.add_argument("--pupil-wide-ema-alpha", type=float, default=0.45, help="EMA alpha for pupil constriction assist wide amount.")
+    parser.add_argument("--openness-curve-mode", choices=("off", "full_open_plateau", "blink_s_curve", "soft_open_plateau"), default="blink_s_curve")
     parser.add_argument("--openness-full-open-threshold", type=float, default=0.90)
     parser.add_argument("--openness-boost-knee", type=float, default=0.28)
     parser.add_argument("--openness-boost-gamma", type=float, default=1.25)
@@ -464,6 +508,8 @@ def main() -> int:
         "right_openness",
         "left_model_wide",
         "right_model_wide",
+        "left_pupil_wide",
+        "right_pupil_wide",
         "left_model_squint",
         "right_model_squint",
         "left_wide",
@@ -505,6 +551,8 @@ def main() -> int:
     print(
         f"Pupil output: {pupil_output_mode}; eye expression: {args.eye_expression_mode}; "
         f"wide source: {args.wide_source} (model>={args.wide_model_threshold:0.2f}, output>={args.wide_output_threshold:0.2f}); "
+        f"pupil wide: enter={args.pupil_wide_enter_threshold:0.2f}, exit={args.pupil_wide_exit_threshold:0.2f}, "
+        f"hold={args.pupil_wide_hold_frames}, ema={args.pupil_wide_ema_alpha:0.2f}; "
         f"openness curve: {args.openness_curve_mode} "
         f"(threshold={args.openness_full_open_threshold:0.2f}, knee={args.openness_boost_knee:0.2f}, gamma={args.openness_boost_gamma:0.2f})"
     )
@@ -523,6 +571,8 @@ def main() -> int:
     last_low_openness_snapshot_sequence = -1_000_000
     last_expression_result: dict[str, np.ndarray] | None = None
     last_expression_sequence = -1_000_000
+    pupil_wide_state = np.zeros(2, dtype=np.float32)
+    pupil_wide_hold_remaining = np.zeros(2, dtype=np.int32)
 
     try:
         with csv_path.open("w", encoding="utf-8", newline="") as handle:
@@ -647,8 +697,17 @@ def main() -> int:
                     )
                 shape_wide = apply_eye_shape_curve(model_wide, args.eye_shape_wide_scale, args.eye_shape_gamma, args.eye_shape_deadzone)
                 shape_squint = apply_eye_shape_curve(model_squint, args.eye_shape_squint_scale, args.eye_shape_gamma, args.eye_shape_deadzone)
-                left_pupil_output = pupil_output_state(pupil_output_mode, float(openness[0]), float(model_wide[0]), float(pupil[2]), float(confidence[0]))
-                right_pupil_output = pupil_output_state(pupil_output_mode, float(openness[1]), float(model_wide[1]), float(pupil[5]), float(confidence[1]))
+                pupil_wide = update_pupil_wide_state(
+                    model_wide,
+                    pupil_wide_state,
+                    pupil_wide_hold_remaining,
+                    args.pupil_wide_enter_threshold,
+                    args.pupil_wide_exit_threshold,
+                    args.pupil_wide_hold_frames,
+                    args.pupil_wide_ema_alpha,
+                )
+                left_pupil_output = pupil_output_state(pupil_output_mode, float(openness[0]), float(pupil_wide[0]), float(pupil[2]), float(confidence[0]))
+                right_pupil_output = pupil_output_state(pupil_output_mode, float(openness[1]), float(pupil_wide[1]), float(pupil[5]), float(confidence[1]))
                 if udp is not None or monitor_udp is not None:
                     packet = bridge_packet(
                         sequence,
@@ -664,7 +723,7 @@ def main() -> int:
                         shape_squint,
                         pupil_output_mode,
                         args.eye_expression_mode,
-                        pupil_wide=model_wide,
+                        pupil_wide=pupil_wide,
                     )
                     if udp is not None and args.udp_port is not None:
                         udp.sendto(packet, (args.udp_host, args.udp_port))
@@ -690,6 +749,8 @@ def main() -> int:
                     "right_openness": f"{openness[1]:.6f}",
                     "left_model_wide": f"{model_wide[0]:.6f}",
                     "right_model_wide": f"{model_wide[1]:.6f}",
+                    "left_pupil_wide": f"{pupil_wide[0]:.6f}",
+                    "right_pupil_wide": f"{pupil_wide[1]:.6f}",
                     "left_model_squint": f"{model_squint[0]:.6f}",
                     "right_model_squint": f"{model_squint[1]:.6f}",
                     "left_wide": f"{shape_wide[0]:.6f}",
@@ -746,6 +807,13 @@ def main() -> int:
                                 "boost_gamma": args.openness_boost_gamma,
                             },
                             "model_wide": [float(model_wide[0]), float(model_wide[1])],
+                            "pupil_wide": [float(pupil_wide[0]), float(pupil_wide[1])],
+                            "pupil_wide_curve": {
+                                "enter_threshold": args.pupil_wide_enter_threshold,
+                                "exit_threshold": args.pupil_wide_exit_threshold,
+                                "hold_frames": args.pupil_wide_hold_frames,
+                                "ema_alpha": args.pupil_wide_ema_alpha,
+                            },
                             "model_squint": [float(model_squint[0]), float(model_squint[1])],
                             "wide": [float(shape_wide[0]), float(shape_wide[1])],
                             "squint": [float(shape_squint[0]), float(shape_squint[1])],

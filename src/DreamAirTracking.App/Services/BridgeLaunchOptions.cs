@@ -44,6 +44,7 @@ public sealed class BridgeLaunchOptions
     public double EmaAlpha { get; set; } = 0.35;
     public double MaxStep { get; set; }
     public string OpennessMode { get; set; } = "image";
+    public string OpennessCurveMode { get; set; } = "blink_s_curve";
     public string? OpennessCalibrationPath { get; set; }
     public double OpennessBoostGamma { get; set; } = 1.25;
     public double OpennessFullOpenThreshold { get; set; } = 0.90;
@@ -52,6 +53,10 @@ public sealed class BridgeLaunchOptions
     public double EyeShapeSquintScale { get; set; } = 0.55;
     public double EyeShapeGamma { get; set; } = 1.15;
     public double EyeShapeDeadzone { get; set; } = 0.03;
+    public double PupilWideEnterThreshold { get; set; } = 0.90;
+    public double PupilWideExitThreshold { get; set; } = 0.86;
+    public int PupilWideHoldFrames { get; set; } = 8;
+    public double PupilWideEmaAlpha { get; set; } = 0.45;
     public string NormalizationMode { get; set; } = "probe_only";
     public double NormalizationTargetX { get; set; } = 0.50;
     public double NormalizationTargetY { get; set; } = 0.54;

@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import os
 import queue
+import socket
 import statistics
 import sys
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -84,12 +88,14 @@ def main() -> int:
     parser.add_argument("--preset", choices=("calibration", "training", "asymmetric", "expression"), default="calibration")
     parser.add_argument("--save-training-images", action="store_true")
     parser.add_argument("--validation-every", type=int, default=999)
+    parser.add_argument("--export-package", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--package-output-dir", type=Path)
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     run_id = time.strftime("%Y%m%d_%H%M%S")
     csv_path = args.output_dir / f"openness_samples_{run_id}.csv"
-    manifest_path = args.output_dir / f"fine_tune_manifest_{run_id}.csv"
+    manifest_path = args.output_dir / "training_manifest_v3.csv"
     calibration_path = args.output_dir / "openness_calibration.json"
     status_path = args.output_dir / "latest_status.json"
 
@@ -218,14 +224,27 @@ def main() -> int:
 
     calibration = build_calibration(rows, csv_path, options)
     calibration_path.write_text(json.dumps(calibration, indent=2, ensure_ascii=False), encoding="utf-8")
+    package_path: Path | None = None
     if args.save_training_images:
-        write_training_manifest(rows, manifest_path, run_id, args.validation_every)
+        write_training_manifest(rows, manifest_path, run_id, args.validation_every, args.output_dir)
+        if args.export_package:
+            package_path = export_capture_package(
+                output_dir=args.output_dir,
+                package_output_dir=args.package_output_dir,
+                session_id=run_id,
+                rows=rows,
+                csv_path=csv_path,
+                manifest_path=manifest_path,
+                calibration=calibration,
+                preset=args.preset,
+            )
     status = {
         "state": "complete",
         "error": None,
         "csv": str(csv_path.resolve()),
         "calibration": str(calibration_path.resolve()),
         "manifest": str(manifest_path.resolve()) if args.save_training_images else None,
+        "capture_package": str(package_path.resolve()) if package_path is not None else None,
         "sample_count": len(rows),
         "left_range": calibration["left"]["range"],
         "right_range": calibration["right"]["range"],
@@ -250,8 +269,8 @@ def play_stage_beep(enabled: bool, stage: str) -> None:
 
 
 def build_calibration(rows: list[dict[str, object]], csv_path: Path, options: OpennessOptions) -> dict[str, object]:
-    open_stages = {"open", "open_confirm"}
-    closed_stages = {"closed"}
+    open_stages = {"open", "open_relaxed", "open_wide", "both_open_relaxed", "both_open_wide", "open_confirm"}
+    closed_stages = {"closed", "both_closed"}
 
     def side_payload(side: str) -> dict[str, object]:
         open_rows = [row for row in rows if row["stage"] in open_stages]
@@ -287,29 +306,73 @@ def build_calibration(rows: list[dict[str, object]], csv_path: Path, options: Op
     }
 
 
-def write_training_manifest(rows: list[dict[str, object]], output: Path, session_id: str, validation_every: int) -> None:
+def write_training_manifest(
+    rows: list[dict[str, object]],
+    output: Path,
+    session_id: str,
+    validation_every: int,
+    output_dir: Path,
+) -> None:
     if validation_every < 2:
         raise SystemExit("--validation-every must be >= 2")
     fields = [
         "sample_id",
+        "subject_id",
+        "wear_id",
+        "session_id",
         "session",
-        "stage",
-        "target_x",
-        "target_y",
+        "sequence_id",
+        "frame_index",
+        "timestamp",
+        "split",
         "left_file",
         "right_file",
+        "target_x",
+        "target_y",
+        "target_source",
+        "gaze_stage",
+        "stage",
+        "openness_target_left",
+        "openness_target_right",
+        "openness_source",
+        "weak_left_openness",
+        "weak_left_pupil_x",
+        "weak_left_pupil_y",
+        "weak_left_pupil_radius",
+        "weak_left_quality",
+        "weak_right_openness",
+        "weak_right_pupil_x",
+        "weak_right_pupil_y",
+        "weak_right_pupil_radius",
+        "weak_right_quality",
+        "weak_pair_quality",
+        "gaze_weight",
+        "openness_valid_left",
+        "openness_valid_right",
+        "wide_valid_left",
+        "wide_valid_right",
+        "squint_valid_left",
+        "squint_valid_right",
+        "pupil_valid_left",
+        "pupil_valid_right",
+        "confidence_valid_left",
+        "confidence_valid_right",
+        "confidence_valid_pair",
+        "sample_weight",
         "left_conf",
         "right_conf",
         "left_center_x",
         "left_center_y",
         "right_center_x",
         "right_center_y",
+        "left_found",
+        "right_found",
         "source",
-        "sample_weight",
-        "split",
+        "notes",
     ]
     by_stage_seen: dict[str, int] = {}
     manifest_rows: list[dict[str, str]] = []
+    identity = build_capture_identity(session_id)
     for row in rows:
         left_file = str(row.get("left_file") or "")
         right_file = str(row.get("right_file") or "")
@@ -319,24 +382,65 @@ def write_training_manifest(rows: list[dict[str, object]], output: Path, session
         by_stage_seen[stage] = by_stage_seen.get(stage, 0) + 1
         split = "val" if by_stage_seen[stage] % validation_every == 0 else "train"
         sequence = int(row["sequence"])
+        left_target, right_target = openness_targets_for_stage(stage)
+        left_score = float(row.get("left_score") or 0.0)
+        right_score = float(row.get("right_score") or 0.0)
+        pair_quality = (left_score + right_score) / 2.0
         manifest_rows.append(
             {
                 "sample_id": f"{session_id}_openness_{stage}_{sequence}",
+                "subject_id": str(identity["subjectId"]),
+                "wear_id": str(identity["wearId"]),
+                "session_id": session_id,
                 "session": session_id,
-                "stage": stage,
-                "target_x": "0.000000",
-                "target_y": "0.000000",
-                "left_file": left_file,
-                "right_file": right_file,
-                "left_conf": "1.000000",
-                "right_conf": "1.000000",
-                "left_center_x": "0.000000",
-                "left_center_y": "0.000000",
-                "right_center_x": "0.000000",
-                "right_center_y": "0.000000",
-                "source": "live_openness_training",
-                "sample_weight": "1.0",
+                "sequence_id": str(sequence),
+                "frame_index": str(sequence),
+                "timestamp": "",
                 "split": split,
+                "left_file": package_relative(left_file, output_dir),
+                "right_file": package_relative(right_file, output_dir),
+                "target_x": "0",
+                "target_y": "0",
+                "target_source": "neutral_center",
+                "gaze_stage": "",
+                "stage": stage,
+                "openness_target_left": f6(left_target),
+                "openness_target_right": f6(right_target),
+                "openness_source": "protocol_label",
+                "weak_left_openness": f6(float(row.get("left_openness") or 0.0)),
+                "weak_left_pupil_x": "0",
+                "weak_left_pupil_y": "0",
+                "weak_left_pupil_radius": "",
+                "weak_left_quality": f6(left_score),
+                "weak_right_openness": f6(float(row.get("right_openness") or 0.0)),
+                "weak_right_pupil_x": "0",
+                "weak_right_pupil_y": "0",
+                "weak_right_pupil_radius": "",
+                "weak_right_quality": f6(right_score),
+                "weak_pair_quality": f6(pair_quality),
+                "gaze_weight": "0",
+                "openness_valid_left": "1",
+                "openness_valid_right": "1",
+                "wide_valid_left": "0",
+                "wide_valid_right": "0",
+                "squint_valid_left": "0",
+                "squint_valid_right": "0",
+                "pupil_valid_left": "0",
+                "pupil_valid_right": "0",
+                "confidence_valid_left": "1",
+                "confidence_valid_right": "1",
+                "confidence_valid_pair": "1",
+                "sample_weight": "0",
+                "left_conf": "1",
+                "right_conf": "1",
+                "left_center_x": "0",
+                "left_center_y": "0",
+                "right_center_x": "0",
+                "right_center_y": "0",
+                "left_found": "1",
+                "right_found": "1",
+                "source": "live_openness_training",
+                "notes": "",
             }
         )
     if not manifest_rows:
@@ -345,6 +449,320 @@ def write_training_manifest(rows: list[dict[str, object]], output: Path, session
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(manifest_rows)
+
+
+def export_capture_package(
+    *,
+    output_dir: Path,
+    package_output_dir: Path | None,
+    session_id: str,
+    rows: list[dict[str, object]],
+    csv_path: Path,
+    manifest_path: Path,
+    calibration: dict[str, object],
+    preset: str,
+) -> Path:
+    package_root = package_output_dir or default_package_output_dir()
+    package_root.mkdir(parents=True, exist_ok=True)
+    package_path = package_root / f"DreamAirTrackingCapture_{session_id}.zip"
+    if package_path.exists():
+        package_path.unlink()
+
+    identity = build_capture_identity(session_id)
+    stages = list(dict.fromkeys(str(row["stage"]) for row in rows))
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    sample_rows = [row for row in rows if row.get("left_file") and row.get("right_file")]
+
+    manifest = {
+        "schema": "dream_air_tracking.capture_package.v1",
+        "createdAt": now,
+        "deviceFamily": "Dream Air",
+        "subjectId": identity["subjectId"],
+        "wearId": identity["wearId"],
+        "captureProtocol": f"eyelid_{preset}",
+        "appVersion": None,
+        "brokenEyeVersion": None,
+        "vrcftVersion": None,
+        "runtimeModelId": None,
+        "sessionId": session_id,
+        "stageIds": stages,
+        "pairCount": len(sample_rows),
+        "privacyNote": "Local export only. Device identity is hashed; raw computer name, user name, and IP are not exported.",
+    }
+    device = {
+        "schema": "dream_air_tracking.device.v1",
+        "deviceFamily": "Dream Air",
+        "subjectId": identity["subjectId"],
+        "wearId": identity["wearId"],
+        "sourceFields": identity["fingerprint"]["sourceFields"],
+        "fingerprint": identity["fingerprint"],
+    }
+    protocol = {
+        "schema": "dream_air_tracking.capture_protocol.v1",
+        "protocolId": f"eyelid_{preset}",
+        "stages": stages,
+        "intendedTrainingHeads": ["openness_lr"],
+        "headMasksRequired": True,
+    }
+    session = {
+        "schemaVersion": "0.1",
+        "sessionId": session_id,
+        "createdAt": now,
+        "device": {"source": "BrokenEye HTTP", "host": "", "port": 0},
+        "operator": {"displayName": ""},
+        "profileInput": "",
+        "notes": f"live_openness_calibration preset={preset}",
+        "stages": [{"stageId": stage, "target": {"x": 0.0, "y": 0.0}} for stage in stages],
+    }
+    metrics = build_package_metrics(calibration, rows, csv_path, preset)
+    report = "\n".join(
+        [
+            "# DreamAirTracking Capture Package",
+            "",
+            f"- Session: {session_id}",
+            f"- Subject: {identity['subjectId']}",
+            f"- Wear: {identity['wearId']}",
+            f"- Preset: {preset}",
+            f"- Pair count: {len(sample_rows)}",
+            f"- Stages: {', '.join(stages)}",
+            "- Training entry: training_manifest_v3.csv",
+            "",
+        ]
+    )
+
+    with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        write_json_zip(archive, "manifest.json", manifest)
+        write_json_zip(archive, "device.json", device)
+        write_json_zip(archive, "capture_protocol.json", protocol)
+        write_json_zip(archive, "session.json", session)
+        archive.writestr("labels.jsonl", build_labels_jsonl(sample_rows))
+        archive.writestr("pairs.csv", build_pairs_csv(sample_rows, output_dir))
+        write_json_zip(archive, "metrics.json", metrics)
+        archive.write(manifest_path, "training_manifest_v3.csv")
+        archive.writestr("calibration_report.md", report)
+        write_json_zip(
+            archive,
+            "runtime/runtime_summary.json",
+            {
+                "schema": "dream_air_tracking.capture_runtime_summary.v1",
+                "exportedRawRuntimeFiles": False,
+                "reason": "Openness capture package exports sanitized training rows only.",
+                "localFilesDetected": [csv_path.name],
+            },
+        )
+        frames_dir = output_dir / "frames"
+        if frames_dir.exists():
+            for frame in sorted(frames_dir.glob("*.jpg")):
+                archive.write(frame, f"frames/{frame.name}")
+
+    return package_path
+
+
+def build_labels_jsonl(rows: list[dict[str, object]]) -> str:
+    grouped: dict[str, list[int]] = {}
+    for row in rows:
+        stage = str(row["stage"])
+        grouped.setdefault(stage, []).append(int(row["sequence"]))
+
+    lines = []
+    for stage, sequences in grouped.items():
+        left_target, right_target = openness_targets_for_stage(stage)
+        target_value = (left_target + right_target) / 2.0
+        label = {
+            "stageId": stage,
+            "target": {"x": 0.0, "y": 0.0},
+            "frameStart": min(sequences),
+            "frameEnd": max(sequences),
+            "accepted": True,
+            "edited": False,
+            "badFrames": [],
+            "operatorVerdict": "good",
+            "notes": f"openness_target_left={target_value:.3f}; generated_by=live_openness_calibration",
+        }
+        lines.append(json.dumps(label, ensure_ascii=False, separators=(",", ":")))
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def build_pairs_csv(rows: list[dict[str, object]], output_dir: Path) -> str:
+    fields = [
+        "sequence",
+        "stage",
+        "left_file",
+        "right_file",
+        "delta_ms",
+        "left_found",
+        "left_raw_x",
+        "left_raw_y",
+        "left_conf",
+        "left_open",
+        "right_found",
+        "right_raw_x",
+        "right_raw_y",
+        "right_conf",
+        "right_open",
+    ]
+    out = []
+    writer = csv.DictWriter(ListWriter(out), fieldnames=fields, lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(
+            {
+                "sequence": int(row["sequence"]),
+                "stage": str(row["stage"]),
+                "left_file": package_relative(str(row["left_file"]), output_dir),
+                "right_file": package_relative(str(row["right_file"]), output_dir),
+                "delta_ms": "0",
+                "left_found": "True",
+                "left_raw_x": "0",
+                "left_raw_y": "0",
+                "left_conf": f6(float(row.get("left_score") or 0.0)),
+                "left_open": f6(float(row.get("left_openness") or 0.0)),
+                "right_found": "True",
+                "right_raw_x": "0",
+                "right_raw_y": "0",
+                "right_conf": f6(float(row.get("right_score") or 0.0)),
+                "right_open": f6(float(row.get("right_openness") or 0.0)),
+            }
+        )
+    return "".join(out)
+
+
+class ListWriter:
+    def __init__(self, target: list[str]) -> None:
+        self.target = target
+
+    def write(self, value: str) -> None:
+        self.target.append(value)
+
+
+def build_package_metrics(
+    calibration: dict[str, object],
+    rows: list[dict[str, object]],
+    csv_path: Path,
+    preset: str,
+) -> dict[str, object]:
+    calibration_export = json.loads(json.dumps(calibration))
+    calibration_export["csv"] = csv_path.name
+    stage_counts: dict[str, int] = {}
+    for row in rows:
+        stage = str(row["stage"])
+        stage_counts[stage] = stage_counts.get(stage, 0) + 1
+    return {
+        "schema": "dream_air_tracking.capture_metrics.v1",
+        "preset": preset,
+        "sampleCount": len(rows),
+        "stageCounts": stage_counts,
+        "sourceCsv": csv_path.name,
+        "calibration": calibration_export,
+    }
+
+
+def write_json_zip(archive: zipfile.ZipFile, name: str, payload: dict[str, object]) -> None:
+    archive.writestr(name, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+
+
+def default_package_output_dir() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "DreamAirTracking" / "capture_packages"
+    return Path.home() / "AppData" / "Local" / "DreamAirTracking" / "capture_packages"
+
+
+def build_capture_identity(session_id: str) -> dict[str, object]:
+    machine = os.environ.get("COMPUTERNAME") or socket.gethostname() or ""
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or ""
+    host = socket.gethostname() or ""
+    ipv4 = local_ipv4_addresses(host)
+    subject_hash = short_hash("subject|" + "|".join([machine.lower(), user.lower(), host.lower(), *ipv4]), 12)
+    wear_hash = short_hash(f"wear|{subject_hash}|{session_id}", 12)
+    return {
+        "subjectId": f"subject_{subject_hash}",
+        "wearId": f"wear_{safe_token(session_id)}_{wear_hash}",
+        "fingerprint": {
+            "schema": "dream_air_tracking.capture_identity.v1",
+            "subjectHash": subject_hash,
+            "wearHash": wear_hash,
+            "machineNameHash": short_hash(f"machine|{machine.lower()}", 16),
+            "userNameHash": short_hash(f"user|{user.lower()}", 16),
+            "hostNameHash": short_hash(f"host|{host.lower()}", 16),
+            "ipv4AddressHashes": [short_hash(f"ipv4|{address}", 16) for address in ipv4],
+            "sessionHash": short_hash(f"session|{session_id}", 16),
+            "sourceFields": ["machine_name", "windows_user", "host_name", "local_ipv4", "session_id"],
+        },
+    }
+
+
+def local_ipv4_addresses(host: str) -> list[str]:
+    addresses: set[str] = set()
+    try:
+        for item in socket.getaddrinfo(host, None, family=socket.AF_INET):
+            address = item[4][0]
+            if address and not address.startswith("127."):
+                addresses.add(address)
+    except Exception:
+        pass
+    return sorted(addresses)
+
+
+def short_hash(value: str, length: int) -> str:
+    return hashlib.sha256(("dream_air_tracking.capture_package|" + value).encode("utf-8")).hexdigest()[:length]
+
+
+def safe_token(value: str) -> str:
+    token = "".join(ch if ch.isalnum() or ch in "_-" else "_" for ch in value).strip("_")
+    return token or time.strftime("%Y%m%d_%H%M%S")
+
+
+def package_relative(value: str, root: Path) -> str:
+    path = Path(value)
+    try:
+        relative = path.resolve().relative_to(root.resolve()).as_posix()
+    except Exception:
+        relative = path.name
+    if not relative.startswith("frames/"):
+        relative = f"frames/{Path(relative).name}"
+    return relative
+
+
+def openness_targets_for_stage(stage: str) -> tuple[float, float]:
+    name = stage.lower()
+    left = 1.0
+    right = 1.0
+    if "closed" in name or "blink" in name:
+        left = 0.0
+        right = 0.0
+    elif "half" in name:
+        left = 0.5
+        right = 0.5
+    elif "squint" in name:
+        left = 0.35
+        right = 0.35
+
+    if "left_open" in name:
+        left = 1.0
+    if "right_open" in name:
+        right = 1.0
+    if "left_half" in name:
+        left = 0.5
+    if "right_half" in name:
+        right = 0.5
+    if "left_squint" in name:
+        left = 0.35
+    if "right_squint" in name:
+        right = 0.35
+    if "left_wide" in name:
+        left = 1.0
+    if "right_wide" in name:
+        right = 1.0
+    if "left_closed" in name:
+        left = 0.0
+    if "right_closed" in name:
+        right = 0.0
+    return left, right
+
+
+def f6(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".") or "0"
 
 
 if __name__ == "__main__":

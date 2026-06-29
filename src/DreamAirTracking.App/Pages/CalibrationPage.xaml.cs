@@ -231,10 +231,10 @@ public sealed partial class CalibrationPage : Page
     private Task StartEyelidCalibrationAsync()
     {
         StartOpennessProcess(
-            outputSubdirectory: IOPath.Combine("runs", "live_openness_calibration_app"),
-            extraArguments: "--settle-seconds 1.5 --stage-seconds 4 --beep",
+            outputSubdirectory: IOPath.Combine("runs", "fullparam_capture", $"eyelid_app_{DateTime.Now:yyyyMMdd_HHmmss}"),
+            extraArguments: "--preset training --settle-seconds 0.8 --stage-seconds 2.0 --save-training-images --validation-every 999 --beep",
             title: "Eyelid calibration",
-            message: "Follow the prompts. The result becomes the current eyelid calibration and can be exported for training.");
+            message: "Follow the prompts. The result becomes the current eyelid calibration and exports a training package automatically.");
         return Task.CompletedTask;
     }
 

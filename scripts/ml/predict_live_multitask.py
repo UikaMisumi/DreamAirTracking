@@ -14,7 +14,9 @@ import socket
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import onnxruntime as ort
@@ -184,6 +186,55 @@ def apply_openness_curve(
     return np.clip(curved, 0.0, 1.0).astype(np.float32)
 
 
+def normalize_per_eye(
+    model_openness: np.ndarray,
+    open_p95: np.ndarray,
+    closed_p05: np.ndarray,
+    min_range: float = 0.05,
+) -> np.ndarray:
+    """Linearly normalize per-eye model openness using calibrated open/closed refs.
+
+    Each eye: clip((v - closed_p05) / (open_p95 - closed_p05), 0, 1). When a
+    per-eye range is degenerate (< min_range) that eye passes through unchanged,
+    so an empty/bad calibration can never corrupt output. NaNs are coerced.
+    Mirrors the dead-legacy predict_live.calibrated_openness, vectorized per eye.
+    """
+    x = np.clip(np.nan_to_num(model_openness.astype(np.float32), nan=0.0), 0.0, 1.0)
+    hi = np.broadcast_to(np.nan_to_num(np.asarray(open_p95, dtype=np.float32), nan=1.0), x.shape).astype(np.float32)
+    lo = np.broadcast_to(np.nan_to_num(np.asarray(closed_p05, dtype=np.float32), nan=0.0), x.shape).astype(np.float32)
+    rng = hi - lo
+    scaled = (x - lo) / np.maximum(rng, 1e-6)
+    out = np.where(rng >= float(min_range), scaled, x)
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
+
+
+def load_per_eye_openness_calibration(
+    path: "Path | None",
+) -> "tuple[np.ndarray, np.ndarray] | None":
+    """Load per-eye (open_p95, closed_p05) from a v2 openness_calibration.json.
+
+    Returns (open_p95[2], closed_p05[2]) or None when the path is missing, the
+    file is absent/unreadable, or lacks per-eye model p95/p05 fields (e.g. a
+    v1-only file). None -> caller keeps raw model openness (identity, harmless).
+    """
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        left = payload["left"]
+        right = payload["right"]
+        open_p95 = np.array([float(left["open_p95"]), float(right["open_p95"])], dtype=np.float32)
+        closed_p05 = np.array([float(left["closed_p05"]), float(right["closed_p05"])], dtype=np.float32)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not np.all(np.isfinite(open_p95)) or not np.all(np.isfinite(closed_p05)):
+        return None
+    return open_p95, closed_p05
+
+
 def apply_eye_shape_curve(values: np.ndarray, scale: float, gamma: float, deadzone: float) -> np.ndarray:
     shaped = np.clip(values.astype(np.float32), 0.0, 1.0)
     deadzone = float(np.clip(deadzone, 0.0, 0.95))
@@ -286,6 +337,269 @@ def update_pupil_wide_state(
                 target = 0.0
         state[index] = state[index] + alpha * (target - state[index])
     return np.clip(state, 0.0, 1.0).astype(np.float32)
+
+
+TRACKING_STATES = (
+    "TRACKING_OK",
+    "FIXATING",
+    "SACCADE",
+    "BLINKING",
+    "CLOSED",
+    "REOPENING",
+    "REACQUIRE",
+    "ONE_EYE_LOST",
+)
+
+
+@dataclass
+class TrackingStateParams:
+    """Parameters for TrackingStateMachine.
+
+    Numeric defaults are the production constants ported from the legacy C#
+    BridgeOpennessFilterOptions / BridgeClosureGazeStabilizerOptions. The two
+    master switches default to OFF so the machine is a pure passthrough unless
+    explicitly enabled (compat mode == today's behavior, byte-identical).
+    """
+
+    # master switches (compat defaults => identity passthrough)
+    openness_machine: bool = False
+    gaze_hold: bool = False
+    # per-eye openness (BridgeOpennessFilterOptions)
+    closed_threshold: float = 0.20
+    other_eye_open_threshold: float = 0.60
+    open_evidence_threshold: float = 0.90
+    open_evidence_floor: float = 0.75
+    open_hold_threshold: float = 0.80
+    single_eye_drop_threshold: float = 0.70
+    other_eye_fully_open_hold_threshold: float = 0.78
+    asymmetric_drop_confirm_frames: int = 2
+    rise_alpha: float = 0.75
+    fall_alpha: float = 0.55
+    both_closed_fall_alpha: float = 0.90
+    # binocular closure gaze hold (BridgeClosureGazeStabilizerOptions)
+    closing_openness_threshold: float = 0.50
+    closed_openness_threshold: float = 0.20
+    reopen_openness_threshold: float = 0.70
+    closing_drop_threshold: float = 0.28
+    closing_drop_max_openness: float = 0.65
+    hold_frames_after_closing: int = 4
+    reopen_release_alpha: float = 0.35
+    # gaze saccade/fixate (reported only in this version; None => no re-smooth)
+    saccade_alpha: "float | None" = None
+    fixate_alpha: "float | None" = None
+    saccade_delta: float = 0.06
+    fixate_delta: float = 0.02
+    fixate_frames: int = 8
+
+
+class TrackingStateMachine:
+    """Explicit per-eye openness + binocular gaze tracking state machine (E1).
+
+    Ports the legacy C# BridgeOpennessFilter (per-eye rise/fall smoothing,
+    single-eye false-close suppression, open-evidence floor) and
+    BridgeClosureGazeStabilizer (hold/lerp gaze while closing/closed) into the
+    production Python runtime, and reports one of TRACKING_STATES per frame.
+
+    Compat: with openness_machine=False and gaze_hold=False it returns the exact
+    input objects (openness == curved, gaze == input) -> byte-identical output.
+    Model openness is already normalized+curved upstream, so the image baseline
+    math from BridgeOpennessFilter.NormalizeAdaptive is intentionally not ported
+    (per-eye normalization is handled separately by normalize_per_eye).
+    """
+
+    def __init__(self, params: TrackingStateParams, ema_alpha: float, min_confidence: float = 0.05) -> None:
+        self.p = params
+        self.ema_alpha = float(ema_alpha)
+        self.min_confidence = float(min_confidence)
+        self._open_state = np.array([1.0, 1.0], dtype=np.float32)
+        self._open_initialized = False
+        self._left_hold = 0
+        self._right_hold = 0
+        self._prev_gaze = None
+        self._prev_avg_open = 1.0
+        self._gaze_hold_frames = 0
+        self._fixate_count = 0
+        self.state = "TRACKING_OK"
+        self.left_substate = "OPEN"
+        self.right_substate = "OPEN"
+
+    def _hold_asymmetric_drop(self, target, other_raw, previous, hold_frames):
+        # Suppress a single-eye false close: keep this eye's previous value for a
+        # few frames when it was open, is dropping, and the other eye stays open.
+        p = self.p
+        if (
+            previous < p.open_hold_threshold
+            or target >= p.single_eye_drop_threshold
+            or other_raw < p.other_eye_open_threshold
+        ):
+            return target, 0
+        hold_frames += 1
+        if other_raw >= p.other_eye_fully_open_hold_threshold or hold_frames <= p.asymmetric_drop_confirm_frames:
+            return previous, hold_frames
+        return target, hold_frames
+
+    def _smooth(self, previous, target, both_closed):
+        p = self.p
+        if target >= previous:
+            alpha = p.rise_alpha
+        elif both_closed:
+            alpha = p.both_closed_fall_alpha
+        else:
+            alpha = p.fall_alpha
+        alpha = min(1.0, max(0.0, alpha))
+        return float(min(1.0, max(0.0, previous + (target - previous) * alpha)))
+
+    def _openness(self, curved):
+        p = self.p
+        if not p.openness_machine:
+            self._open_state = curved.astype(np.float32)
+            return curved  # passthrough: same values (already clipped upstream)
+        raw = np.clip(curved.astype(np.float32), 0.0, 1.0).copy()
+        for i in range(2):
+            if float(curved[i]) >= p.open_evidence_threshold:
+                raw[i] = max(float(raw[i]), p.open_evidence_floor)
+        if not self._open_initialized:
+            self._open_initialized = True
+            self._open_state = raw.copy()
+            return self._open_state
+        both_closed = bool(raw[0] <= p.closed_threshold and raw[1] <= p.closed_threshold)
+        target = raw.copy()
+        if not both_closed:
+            target[0], self._left_hold = self._hold_asymmetric_drop(
+                float(raw[0]), float(raw[1]), float(self._open_state[0]), self._left_hold
+            )
+            target[1], self._right_hold = self._hold_asymmetric_drop(
+                float(raw[1]), float(raw[0]), float(self._open_state[1]), self._right_hold
+            )
+        else:
+            self._left_hold = 0
+            self._right_hold = 0
+        self._open_state[0] = self._smooth(float(self._open_state[0]), float(target[0]), both_closed)
+        self._open_state[1] = self._smooth(float(self._open_state[1]), float(target[1]), both_closed)
+        return self._open_state
+
+    def _gaze(self, gaze, avg_open):
+        p = self.p
+        if not p.gaze_hold:
+            self._prev_gaze = np.asarray(gaze, dtype=np.float32).copy()
+            self._prev_avg_open = avg_open
+            return gaze  # passthrough: same object
+        g = np.clip(np.asarray(gaze, dtype=np.float32), -1.0, 1.0)
+        if self._prev_gaze is None:
+            self._prev_gaze = g.copy()
+            self._prev_avg_open = avg_open
+            return self._prev_gaze
+        closing_drop = (self._prev_avg_open - avg_open >= p.closing_drop_threshold) and (
+            avg_open <= p.closing_drop_max_openness
+        )
+        closing = closing_drop or avg_open <= p.closing_openness_threshold
+        closed = avg_open <= p.closed_openness_threshold
+        if closing:
+            self._gaze_hold_frames = max(self._gaze_hold_frames, max(0, int(p.hold_frames_after_closing)))
+        if closed or (self._gaze_hold_frames > 0 and avg_open < p.reopen_openness_threshold):
+            out = self._prev_gaze.copy()
+            if self._gaze_hold_frames > 0:
+                self._gaze_hold_frames -= 1
+        elif self._gaze_hold_frames > 0:
+            alpha = min(1.0, max(0.0, p.reopen_release_alpha))
+            out = self._prev_gaze + (g - self._prev_gaze) * alpha
+            self._prev_gaze = out.copy()
+            self._gaze_hold_frames -= 1
+        else:
+            out = g.copy()
+            self._prev_gaze = out.copy()
+        self._prev_avg_open = avg_open
+        return out.astype(np.float32)
+
+    def _substate(self, value):
+        p = self.p
+        if value <= p.closed_threshold:
+            return "CLOSED"
+        if value >= p.open_hold_threshold:
+            return "OPEN"
+        return "PARTIAL"
+
+    def _classify(self, open_out, avg_open, prev_avg, hold_before, pair_conf, gaze_delta):
+        p = self.p
+        if pair_conf < self.min_confidence:
+            return "REACQUIRE"
+        left_closed = float(open_out[0]) <= p.closed_threshold
+        right_closed = float(open_out[1]) <= p.closed_threshold
+        if left_closed != right_closed:
+            return "ONE_EYE_LOST"
+        if avg_open <= p.closed_openness_threshold:
+            return "CLOSED"
+        closing_drop = (prev_avg - avg_open >= p.closing_drop_threshold) and (avg_open <= p.closing_drop_max_openness)
+        if closing_drop:
+            return "BLINKING"
+        if hold_before > 0 and avg_open < p.reopen_openness_threshold:
+            return "REOPENING"
+        if gaze_delta >= p.saccade_delta:
+            self._fixate_count = 0
+            return "SACCADE"
+        if gaze_delta < p.fixate_delta:
+            self._fixate_count += 1
+            if self._fixate_count >= p.fixate_frames:
+                return "FIXATING"
+        else:
+            self._fixate_count = 0
+        return "TRACKING_OK"
+
+    def update(self, curved_openness, model_openness, confidence, gaze):
+        curved = curved_openness
+        open_out = self._openness(curved)
+        avg_open = float(np.clip((float(open_out[0]) + float(open_out[1])) * 0.5, 0.0, 1.0))
+        conf = np.asarray(confidence, dtype=np.float32)
+        pair_conf = float(conf[2]) if conf.size > 2 else float(np.min(conf[:2]))
+        prev_gaze_snapshot = None if self._prev_gaze is None else self._prev_gaze.copy()
+        prev_avg_snapshot = self._prev_avg_open
+        hold_before = self._gaze_hold_frames
+        gaze_out = self._gaze(gaze, avg_open)
+        if prev_gaze_snapshot is not None:
+            gi = np.asarray(gaze, dtype=np.float32)
+            gaze_delta = float(np.linalg.norm(gi[:2] - prev_gaze_snapshot[:2]))
+        else:
+            gaze_delta = 0.0
+        self.state = self._classify(open_out, avg_open, prev_avg_snapshot, hold_before, pair_conf, gaze_delta)
+        self.left_substate = self._substate(float(open_out[0]))
+        self.right_substate = self._substate(float(open_out[1]))
+        return SimpleNamespace(
+            openness=open_out,
+            gaze=gaze_out,
+            state=self.state,
+            left_substate=self.left_substate,
+            right_substate=self.right_substate,
+        )
+
+
+def build_tracking_params(args) -> TrackingStateParams:
+    return TrackingStateParams(
+        openness_machine=(args.tracking_openness_machine == "on"),
+        gaze_hold=bool(args.tracking_gaze_hold),
+        closed_threshold=args.tracking_openness_closed_threshold,
+        other_eye_open_threshold=args.tracking_other_eye_open_threshold,
+        open_evidence_threshold=args.tracking_open_evidence_threshold,
+        open_evidence_floor=args.tracking_open_evidence_floor,
+        open_hold_threshold=args.tracking_open_hold_threshold,
+        single_eye_drop_threshold=args.tracking_single_eye_drop_threshold,
+        other_eye_fully_open_hold_threshold=args.tracking_other_eye_fully_open_hold_threshold,
+        asymmetric_drop_confirm_frames=args.tracking_asymmetric_drop_confirm_frames,
+        rise_alpha=args.tracking_openness_rise_alpha,
+        fall_alpha=args.tracking_openness_fall_alpha,
+        both_closed_fall_alpha=args.tracking_openness_both_closed_fall_alpha,
+        closing_openness_threshold=args.tracking_gaze_closing_openness_threshold,
+        closed_openness_threshold=args.tracking_gaze_closed_openness_threshold,
+        reopen_openness_threshold=args.tracking_gaze_reopen_openness_threshold,
+        closing_drop_threshold=args.tracking_gaze_closing_drop_threshold,
+        closing_drop_max_openness=args.tracking_gaze_closing_drop_max_openness,
+        hold_frames_after_closing=args.tracking_gaze_hold_frames,
+        reopen_release_alpha=args.tracking_gaze_reopen_release_alpha,
+        saccade_alpha=args.tracking_gaze_saccade_alpha,
+        fixate_alpha=args.tracking_gaze_fixate_alpha,
+        saccade_delta=args.tracking_gaze_saccade_delta,
+        fixate_delta=args.tracking_gaze_fixate_delta,
+        fixate_frames=args.tracking_gaze_fixate_frames,
+    )
 
 
 def bridge_eye(
@@ -427,6 +741,49 @@ def main() -> int:
     parser.add_argument("--openness-full-open-threshold", type=float, default=0.90)
     parser.add_argument("--openness-boost-knee", type=float, default=0.28)
     parser.add_argument("--openness-boost-gamma", type=float, default=1.25)
+    parser.add_argument(
+        "--openness-per-eye-calibration",
+        type=Path,
+        default=None,
+        help="Optional v2 openness_calibration.json with per-eye open_p95/closed_p05; "
+        "absent -> raw model openness (identity).",
+    )
+    parser.add_argument(
+        "--tracking-openness-machine",
+        choices=("off", "on"),
+        default="off",
+        help="Per-eye openness state machine (rise/fall smoothing, single-eye false-close suppression, "
+        "open-evidence floor). off -> passthrough (default, byte-identical to legacy).",
+    )
+    parser.add_argument(
+        "--tracking-gaze-hold",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Hold/lerp gaze while eyes are closing/closed (ports BridgeClosureGazeStabilizer).",
+    )
+    parser.add_argument("--tracking-openness-closed-threshold", type=float, default=0.20)
+    parser.add_argument("--tracking-openness-rise-alpha", type=float, default=0.75)
+    parser.add_argument("--tracking-openness-fall-alpha", type=float, default=0.55)
+    parser.add_argument("--tracking-openness-both-closed-fall-alpha", type=float, default=0.90)
+    parser.add_argument("--tracking-open-evidence-threshold", type=float, default=0.90)
+    parser.add_argument("--tracking-open-evidence-floor", type=float, default=0.75)
+    parser.add_argument("--tracking-open-hold-threshold", type=float, default=0.80)
+    parser.add_argument("--tracking-single-eye-drop-threshold", type=float, default=0.70)
+    parser.add_argument("--tracking-other-eye-open-threshold", type=float, default=0.60)
+    parser.add_argument("--tracking-other-eye-fully-open-hold-threshold", type=float, default=0.78)
+    parser.add_argument("--tracking-asymmetric-drop-confirm-frames", type=int, default=2)
+    parser.add_argument("--tracking-gaze-closing-openness-threshold", type=float, default=0.50)
+    parser.add_argument("--tracking-gaze-closed-openness-threshold", type=float, default=0.20)
+    parser.add_argument("--tracking-gaze-reopen-openness-threshold", type=float, default=0.70)
+    parser.add_argument("--tracking-gaze-closing-drop-threshold", type=float, default=0.28)
+    parser.add_argument("--tracking-gaze-closing-drop-max-openness", type=float, default=0.65)
+    parser.add_argument("--tracking-gaze-hold-frames", type=int, default=4)
+    parser.add_argument("--tracking-gaze-reopen-release-alpha", type=float, default=0.35)
+    parser.add_argument("--tracking-gaze-saccade-alpha", type=float, default=None)
+    parser.add_argument("--tracking-gaze-fixate-alpha", type=float, default=None)
+    parser.add_argument("--tracking-gaze-saccade-delta", type=float, default=0.06)
+    parser.add_argument("--tracking-gaze-fixate-delta", type=float, default=0.02)
+    parser.add_argument("--tracking-gaze-fixate-frames", type=int, default=8)
     parser.add_argument("--udp-port", type=int, help="Optional DreamAirTracking VRCFT bridge UDP port, usually 9400.")
     parser.add_argument("--udp-host", default="127.0.0.1")
     parser.add_argument("--monitor-udp-port", type=int, default=0, help="Optional App monitor UDP port, usually 9401; 0 disables.")
@@ -506,6 +863,11 @@ def main() -> int:
         "right_model_openness",
         "left_openness",
         "right_openness",
+        "left_norm_openness",
+        "right_norm_openness",
+        "tracking_state",
+        "left_substate",
+        "right_substate",
         "left_model_wide",
         "right_model_wide",
         "left_pupil_wide",
@@ -573,6 +935,17 @@ def main() -> int:
     last_expression_sequence = -1_000_000
     pupil_wide_state = np.zeros(2, dtype=np.float32)
     pupil_wide_hold_remaining = np.zeros(2, dtype=np.int32)
+    openness_cal = load_per_eye_openness_calibration(args.openness_per_eye_calibration)
+    if openness_cal is not None:
+        print(
+            f"Per-eye openness calibration: open_p95={openness_cal[0].tolist()} "
+            f"closed_p05={openness_cal[1].tolist()}"
+        )
+    tracking = TrackingStateMachine(build_tracking_params(args), args.ema_alpha)
+    print(
+        f"Tracking state machine: openness_machine={args.tracking_openness_machine} "
+        f"gaze_hold={bool(args.tracking_gaze_hold)}"
+    )
 
     try:
         with csv_path.open("w", encoding="utf-8", newline="") as handle:
@@ -649,8 +1022,12 @@ def main() -> int:
                         result["wide_lr"] = last_expression_result["wide_lr"]
                         result["squint_lr"] = last_expression_result["squint_lr"]
                 model_openness = result["openness_lr"]
-                openness = apply_openness_curve(
-                    model_openness,
+                if openness_cal is not None:
+                    norm_openness = normalize_per_eye(model_openness, openness_cal[0], openness_cal[1])
+                else:
+                    norm_openness = model_openness
+                curved = apply_openness_curve(
+                    norm_openness,
                     args.openness_curve_mode,
                     args.openness_full_open_threshold,
                     args.openness_boost_knee,
@@ -664,9 +1041,12 @@ def main() -> int:
                     mapped,
                     timestamp=frame_timestamp,
                     confidence=float(confidence[2]),
-                    openness=float(np.mean(openness)),
+                    openness=float(np.mean(curved)),
                 )
                 smooth = update_smooth(smooth, mapped, args.ema_alpha, args.max_step)
+                tracking_result = tracking.update(curved, model_openness, confidence, smooth)
+                openness = tracking_result.openness
+                smooth = tracking_result.gaze
 
                 sequence += 1
                 snapshot_left = ""
@@ -747,6 +1127,11 @@ def main() -> int:
                     "right_model_openness": f"{model_openness[1]:.6f}",
                     "left_openness": f"{openness[0]:.6f}",
                     "right_openness": f"{openness[1]:.6f}",
+                    "left_norm_openness": f"{norm_openness[0]:.6f}",
+                    "right_norm_openness": f"{norm_openness[1]:.6f}",
+                    "tracking_state": tracking_result.state,
+                    "left_substate": tracking_result.left_substate,
+                    "right_substate": tracking_result.right_substate,
                     "left_model_wide": f"{model_wide[0]:.6f}",
                     "right_model_wide": f"{model_wide[1]:.6f}",
                     "left_pupil_wide": f"{pupil_wide[0]:.6f}",
@@ -805,6 +1190,14 @@ def main() -> int:
                                 "full_open_threshold": args.openness_full_open_threshold,
                                 "boost_knee": args.openness_boost_knee,
                                 "boost_gamma": args.openness_boost_gamma,
+                            },
+                            "tracking_state_machine": {
+                                "openness_machine": args.tracking_openness_machine == "on",
+                                "gaze_hold": bool(args.tracking_gaze_hold),
+                                "calibration_loaded": openness_cal is not None,
+                                "state": tracking_result.state,
+                                "left_substate": tracking_result.left_substate,
+                                "right_substate": tracking_result.right_substate,
                             },
                             "model_wide": [float(model_wide[0]), float(model_wide[1])],
                             "pupil_wide": [float(pupil_wide[0]), float(pupil_wide[1])],

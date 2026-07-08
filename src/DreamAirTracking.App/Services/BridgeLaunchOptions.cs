@@ -46,6 +46,9 @@ public sealed class BridgeLaunchOptions
     public string OpennessMode { get; set; } = "image";
     public string OpennessCurveMode { get; set; } = "blink_s_curve";
     public string? OpennessCalibrationPath { get; set; }
+    public string? OpennessPerEyeCalibrationPath { get; set; }
+    public bool EnableTrackingStateMachine { get; set; } = true;
+    public bool EnableClosureGazeHold { get; set; } = true;
     public double OpennessBoostGamma { get; set; } = 1.25;
     public double OpennessFullOpenThreshold { get; set; } = 0.90;
     public double OpennessBoostKnee { get; set; } = 0.28;

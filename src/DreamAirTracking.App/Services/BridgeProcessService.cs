@@ -546,6 +546,18 @@ public sealed class BridgeProcessService
             startInfo.ArgumentList.Add(Format(Options.OpennessBoostKnee));
             startInfo.ArgumentList.Add("--openness-boost-gamma");
             startInfo.ArgumentList.Add(Format(Options.OpennessBoostGamma));
+            startInfo.ArgumentList.Add("--tracking-openness-machine");
+            startInfo.ArgumentList.Add(Options.EnableTrackingStateMachine ? "on" : "off");
+            startInfo.ArgumentList.Add(
+                Options.EnableTrackingStateMachine && Options.EnableClosureGazeHold
+                    ? "--tracking-gaze-hold"
+                    : "--no-tracking-gaze-hold");
+            var perEyeCalibrationPath = ResolveOpennessPerEyeCalibrationPath(FindRepoRoot());
+            if (!string.IsNullOrWhiteSpace(perEyeCalibrationPath))
+            {
+                startInfo.ArgumentList.Add("--openness-per-eye-calibration");
+                startInfo.ArgumentList.Add(perEyeCalibrationPath);
+            }
             startInfo.ArgumentList.Add("--ema-alpha");
             startInfo.ArgumentList.Add(Format(Options.EmaAlpha));
             startInfo.ArgumentList.Add("--max-step");
@@ -989,6 +1001,18 @@ public sealed class BridgeProcessService
             .OrderByDescending(file => file.LastWriteTimeUtc)
             .Select(file => file.FullName)
             .FirstOrDefault();
+    }
+
+    private string? ResolveOpennessPerEyeCalibrationPath(string repoRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(Options.OpennessPerEyeCalibrationPath) && File.Exists(Options.OpennessPerEyeCalibrationPath))
+        {
+            return Options.OpennessPerEyeCalibrationPath;
+        }
+
+        // Fall back to the same openness_calibration.json the UI already manages;
+        // the Python loader ignores v1-only files (returns identity), so this is safe.
+        return ResolveOpennessCalibrationPath(repoRoot);
     }
 
     private BridgeLaunchOptions LoadOptions()

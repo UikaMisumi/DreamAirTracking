@@ -17,7 +17,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
-from torchvision.models import mobilenet_v3_small
+from torchvision.models import MobileNet_V3_Small_Weights, mobilenet_v3_small
 
 
 WEAK_FIELDS = (
@@ -333,19 +333,37 @@ def metadata_features(
     )
 
 
+def build_pretrainable_backbone(in_channels: int, pretrained: bool) -> nn.Module:
+    """MobileNetV3-small backbone with conv1 re-shaped for grayscale eye input.
+
+    pretrained=True loads ImageNet weights and folds the RGB conv1 filters to the
+    requested input-channel count (sum over RGB, normalized), so low-level
+    edge/texture priors survive the domain change. E3 step 1: stop the weights=None
+    from-scratch training that let the encoder overfit a single subject.
+    """
+    weights = MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None
+    backbone = mobilenet_v3_small(weights=weights)
+    first = backbone.features[0][0]
+    new_conv = nn.Conv2d(
+        in_channels,
+        first.out_channels,
+        kernel_size=first.kernel_size,
+        stride=first.stride,
+        padding=first.padding,
+        bias=False,
+    )
+    if pretrained:
+        with torch.no_grad():
+            gray = first.weight.sum(dim=1, keepdim=True)  # [out,3,k,k] -> [out,1,k,k]
+            new_conv.weight.copy_(gray.repeat(1, in_channels, 1, 1) / float(in_channels))
+    backbone.features[0][0] = new_conv
+    return backbone
+
+
 class MobileNetV3SmallEyeMultitask(nn.Module):
-    def __init__(self, image_size: int) -> None:
+    def __init__(self, image_size: int, pretrained: bool = False) -> None:
         super().__init__()
-        backbone = mobilenet_v3_small(weights=None)
-        first = backbone.features[0][0]
-        backbone.features[0][0] = nn.Conv2d(
-            2,
-            first.out_channels,
-            kernel_size=first.kernel_size,
-            stride=first.stride,
-            padding=first.padding,
-            bias=False,
-        )
+        backbone = build_pretrainable_backbone(2, pretrained)
         self.features = backbone.features
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         in_features = backbone.classifier[0].in_features
@@ -378,18 +396,9 @@ class MobileNetV3SmallEyeMultitask(nn.Module):
 
 
 class SiameseMobileNetV3SmallEyeMultitask(nn.Module):
-    def __init__(self, image_size: int, metadata_size: int = 0) -> None:
+    def __init__(self, image_size: int, metadata_size: int = 0, pretrained: bool = False) -> None:
         super().__init__()
-        backbone = mobilenet_v3_small(weights=None)
-        first = backbone.features[0][0]
-        backbone.features[0][0] = nn.Conv2d(
-            1,
-            first.out_channels,
-            kernel_size=first.kernel_size,
-            stride=first.stride,
-            padding=first.padding,
-            bias=False,
-        )
+        backbone = build_pretrainable_backbone(1, pretrained)
         self.features = backbone.features
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         in_features = backbone.classifier[0].in_features
@@ -460,10 +469,10 @@ class SiameseMobileNetV3SmallEyeMultitask(nn.Module):
 class SplitSiameseMobileNetV3SmallEyeMultitask(nn.Module):
     """Two isolated Siamese branches: geometry heads from one branch, expression heads from another."""
 
-    def __init__(self, image_size: int) -> None:
+    def __init__(self, image_size: int, pretrained: bool = False) -> None:
         super().__init__()
-        self.geometry = SiameseMobileNetV3SmallEyeMultitask(image_size)
-        self.expression = SiameseMobileNetV3SmallEyeMultitask(image_size)
+        self.geometry = SiameseMobileNetV3SmallEyeMultitask(image_size, pretrained=pretrained)
+        self.expression = SiameseMobileNetV3SmallEyeMultitask(image_size, pretrained=pretrained)
         self.image_size = image_size
 
     def forward(self, image: torch.Tensor, metadata: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -495,16 +504,38 @@ def model_uses_metadata(model_type: str) -> bool:
     return model_type == "siamese_metadata_mobilenetv3_small_multitask"
 
 
-def build_model(model_type: str, image_size: int) -> nn.Module:
+def build_model(model_type: str, image_size: int, pretrained: bool = False) -> nn.Module:
     if model_type == "mobilenetv3_small_multitask":
-        return MobileNetV3SmallEyeMultitask(image_size)
+        return MobileNetV3SmallEyeMultitask(image_size, pretrained=pretrained)
     if model_type == "siamese_mobilenetv3_small_multitask":
-        return SiameseMobileNetV3SmallEyeMultitask(image_size)
+        return SiameseMobileNetV3SmallEyeMultitask(image_size, pretrained=pretrained)
     if model_type == "siamese_metadata_mobilenetv3_small_multitask":
-        return SiameseMobileNetV3SmallEyeMultitask(image_size, metadata_size=METADATA_FEATURE_COUNT)
+        return SiameseMobileNetV3SmallEyeMultitask(image_size, metadata_size=METADATA_FEATURE_COUNT, pretrained=pretrained)
     if model_type == "split_siamese_mobilenetv3_small_multitask":
-        return SplitSiameseMobileNetV3SmallEyeMultitask(image_size)
+        return SplitSiameseMobileNetV3SmallEyeMultitask(image_size, pretrained=pretrained)
     raise ValueError(f"Unsupported multitask model_type={model_type}")
+
+
+def load_pretrained_encoder(model: nn.Module, path: Path, device: str) -> None:
+    """Load an OpenEDS-pretrained encoder ('features' state_dict) into a DreamAir model.
+
+    Applies to the shared MobileNetV3 feature stack of the two_channel / siamese /
+    siamese_metadata models, and to both branches of split_siamese. strict=False so a
+    channel-mismatched conv1 (e.g. 2-ch two_channel vs 1-ch pretrain) is skipped.
+    """
+    state = torch.load(path, map_location=device)
+    if isinstance(state, dict) and "features" in state and isinstance(state["features"], dict):
+        state = state["features"]
+    stacks: list[tuple[str, nn.Module]] = []
+    if hasattr(model, "features"):
+        stacks.append(("features", model.features))
+    if hasattr(model, "geometry") and hasattr(model.geometry, "features"):
+        stacks.append(("geometry.features", model.geometry.features))
+        stacks.append(("expression.features", model.expression.features))
+    for name, feats in stacks:
+        missing, unexpected = feats.load_state_dict(state, strict=False)
+        print(f"Loaded pretrained encoder into {name}: matched={len(state) - len(unexpected)} "
+              f"missing={len(missing)} unexpected={len(unexpected)}")
 
 
 def weighted_mean(loss: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
@@ -775,6 +806,14 @@ def train(args: argparse.Namespace) -> dict[str, object]:
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
+    from manifest_head_mask_gate import enforce as enforce_manifest_gate
+
+    enforce_manifest_gate(
+        args.manifest.resolve(),
+        allow_weak_fallback=getattr(args, "allow_weak_label_fallback", False),
+        allow_gaze_head_cosupervision=getattr(args, "allow_gaze_head_cosupervision", False),
+        skip=getattr(args, "skip_manifest_audit", False),
+    )
     samples = read_manifest(args.manifest.resolve())
     train_samples = [sample for sample in samples if sample.split == "train"]
     val_samples = [sample for sample in samples if sample.split == "val"]
@@ -800,7 +839,9 @@ def train(args: argparse.Namespace) -> dict[str, object]:
 
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     model_type = model_type_from_architecture(args.architecture)
-    model = build_model(model_type, args.image_size).to(device)
+    model = build_model(model_type, args.image_size, pretrained=getattr(args, "pretrained_backbone", False)).to(device)
+    if getattr(args, "pretrained_encoder", None):
+        load_pretrained_encoder(model, args.pretrained_encoder, device)
     if args.init_checkpoint:
         checkpoint = torch.load(args.init_checkpoint, map_location=device)
         checkpoint_model_type = checkpoint.get("model_type")
@@ -967,8 +1008,38 @@ def train(args: argparse.Namespace) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument(
+        "--allow-weak-label-fallback",
+        action="store_true",
+        help="Opt into the legacy silent fallback: when a manifest lacks openness/pupil valid "
+        "columns, supervise those heads from weak labels instead of failing the head-mask gate.",
+    )
+    parser.add_argument(
+        "--allow-gaze-head-cosupervision",
+        action="store_true",
+        help="Allow gaze rows to also supervise openness/pupil (demote that head-mask check to a warning). "
+        "Note: the current v5-style manifests trip this; the clean fix is to set openness/pupil valid=0 on gaze rows.",
+    )
+    parser.add_argument(
+        "--skip-manifest-audit",
+        action="store_true",
+        help="Bypass the head-mask training gate entirely (not recommended).",
+    )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--architecture", choices=("two_channel", "siamese", "siamese_metadata", "split_siamese"), default="two_channel")
+    parser.add_argument(
+        "--pretrained-backbone",
+        action="store_true",
+        help="Initialize the MobileNetV3 backbone from ImageNet (conv1 folded to grayscale) instead of "
+        "weights=None. E3 step 1: for training a base model; backbone weights are overridden by --init-checkpoint.",
+    )
+    parser.add_argument(
+        "--pretrained-encoder",
+        type=Path,
+        default=None,
+        help="Load an OpenEDS-pretrained encoder ('features' state_dict from "
+        "pretrain_openeds_segmentation.py) into the backbone. E3 step 2.",
+    )
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--max-train-steps", type=int, default=0, help="Stop after this many optimizer steps; 0 means use all epochs.")
     parser.add_argument("--batch-size", type=int, default=32)

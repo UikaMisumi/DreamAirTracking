@@ -146,7 +146,24 @@ def is_expression_valid(row: dict[str, str]) -> bool:
     return stage in EXPRESSION_VALID_STAGES
 
 
+def _is_gaze_only_row(row: dict[str, str]) -> bool:
+    """A gaze row must not supervise openness/pupil (head-mask discipline).
+
+    Gaze rows carry a weak model openness estimate in weak_*_openness (~1.0 for open
+    eyes), but that estimate must NOT flip the openness/pupil mask on -- otherwise the
+    model co-supervises gaze and openness on the same frame and entangles them.
+    """
+    if row.get("openness_source", "").strip().lower() == "not_supervised":
+        return True
+    return as_float(row, "gaze_weight", 0.0) > 0.0
+
+
 def openness_valid(row: dict[str, str], side: str) -> bool:
+    if _is_gaze_only_row(row):
+        return False
+    key = f"openness_valid_{side}"
+    if has_value(row, key):
+        return as_float(row, key) > 0.0  # honor the explicit column from the app exporter
     return has_value(row, f"weak_{side}_openness") or has_value(row, f"openness_target_{side}")
 
 
@@ -155,6 +172,8 @@ def openness_target(row: dict[str, str], side: str) -> float:
 
 
 def pupil_valid(row: dict[str, str], side: str, args: argparse.Namespace) -> bool:
+    if _is_gaze_only_row(row):
+        return False  # head-mask discipline: gaze rows never supervise pupil
     source = row.get("source", "").strip().lower()
     if source == "synthetic_eyelid_mix":
         return False

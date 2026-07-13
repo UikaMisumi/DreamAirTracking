@@ -17,12 +17,15 @@ import time
 import zipfile
 from pathlib import Path
 
+import numpy as np
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from live_gaze_dry_run import JpegFrame, choose_pair, jpeg_stream, save_pair_snapshots  # noqa: E402
 from predict_live import OpennessOptions, detect_openness, openness_score  # noqa: E402
+from predict_live_multitask import load_image_size, run_onnx  # noqa: E402
 
 
 CALIBRATION_STAGES = [
@@ -90,6 +93,14 @@ def main() -> int:
     parser.add_argument("--validation-every", type=int, default=999)
     parser.add_argument("--export-package", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--package-output-dir", type=Path)
+    parser.add_argument("--model-onnx", type=Path, default=None,
+                        help="Optional multitask ONNX; enables per-eye model-openness p95/p05 calibration (v2).")
+    parser.add_argument("--model-metadata", type=Path, default=None,
+                        help="Optional metadata.json for --model-onnx image size.")
+    parser.add_argument("--model-openness", action="store_true",
+                        help="Run --model-onnx per pair and calibrate per-eye open_p95/closed_p05 on model openness_lr.")
+    parser.add_argument("--open-percentile", type=float, default=95.0)
+    parser.add_argument("--closed-percentile", type=float, default=5.0)
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -98,6 +109,52 @@ def main() -> int:
     manifest_path = args.output_dir / "training_manifest_v3.csv"
     calibration_path = args.output_dir / "openness_calibration.json"
     status_path = args.output_dir / "latest_status.json"
+
+    if args.model_openness and args.model_onnx is None:
+        # Auto-resolve the model so the app can just pass --model-openness. Search the
+        # installed models dir first, then the launch dir (the app runs the script with
+        # cwd = repo root).
+        candidates: list[Path] = []
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            candidates += sorted((Path(local) / "DreamAirTracking" / "models").glob("*/model.onnx"))
+        candidates += sorted(Path.cwd().glob("models/*/model.onnx"))
+        candidates += sorted(Path.cwd().rglob("model.onnx"))[:10]
+        candidates += sorted(Path.cwd().rglob("eye_multitask.onnx"))[:10]
+        seen: set[str] = set()
+        candidates = [p for p in candidates if not (str(p) in seen or seen.add(str(p)))]
+
+        def _rank(p: Path) -> int:
+            s = str(p).lower()
+            if "expression" in s:
+                return 3  # expression ONNX does not drive openness_lr; least preferred
+            if "main" in s:
+                return 0
+            if "current" in s:
+                return 1
+            return 2
+
+        chosen = sorted(candidates, key=_rank)
+        if chosen:
+            args.model_onnx = chosen[0]
+            for meta in (chosen[0].parent / "metadata.json", chosen[0].with_name(chosen[0].stem + ".metadata.json")):
+                if args.model_metadata is None and meta.exists():
+                    args.model_metadata = meta
+                    break
+            print(f"Auto-resolved model: {args.model_onnx}")
+        else:
+            print("WARNING: --model-openness set but no model (model.onnx / eye_multitask.onnx) found; "
+                  "using v1 heuristic calibration.")
+            args.model_openness = False
+
+    model_session = None
+    model_image_size = 128
+    if args.model_openness:
+        import onnxruntime as ort
+
+        model_image_size = load_image_size(args.model_metadata.resolve() if args.model_metadata else None, 128)
+        model_session = ort.InferenceSession(str(args.model_onnx.resolve()), providers=["CPUExecutionProvider"])
+        print(f"Model openness calibration ON: {args.model_onnx} (image_size={model_image_size})")
 
     options = OpennessOptions(
         mode="image",
@@ -178,6 +235,12 @@ def main() -> int:
                 sequence += 1
                 left_detection = detect_openness(left.jpeg, options)
                 right_detection = detect_openness(right.jpeg, options)
+                left_model_openness: float | str = ""
+                right_model_openness: float | str = ""
+                if model_session is not None:
+                    model_openness = run_onnx(model_session, left, right, model_image_size)["openness_lr"]
+                    left_model_openness = float(model_openness[0])
+                    right_model_openness = float(model_openness[1])
                 left_file = ""
                 right_file = ""
                 if args.save_training_images:
@@ -198,6 +261,8 @@ def main() -> int:
                         "right_aperture_height": right_detection.aperture_height,
                         "left_peak_dark_fraction": left_detection.peak_dark_fraction,
                         "right_peak_dark_fraction": right_detection.peak_dark_fraction,
+                        "left_model_openness": left_model_openness,
+                        "right_model_openness": right_model_openness,
                         "left_reason": left_detection.reason,
                         "right_reason": right_detection.reason,
                     }
@@ -222,7 +287,7 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(rows)
 
-    calibration = build_calibration(rows, csv_path, options)
+    calibration = build_calibration(rows, csv_path, options, args.open_percentile, args.closed_percentile)
     calibration_path.write_text(json.dumps(calibration, indent=2, ensure_ascii=False), encoding="utf-8")
     package_path: Path | None = None
     if args.save_training_images:
@@ -268,13 +333,31 @@ def play_stage_beep(enabled: bool, stage: str) -> None:
         print("\a", end="", flush=True)
 
 
-def build_calibration(rows: list[dict[str, object]], csv_path: Path, options: OpennessOptions) -> dict[str, object]:
+def build_calibration(
+    rows: list[dict[str, object]],
+    csv_path: Path,
+    options: OpennessOptions,
+    open_percentile: float = 95.0,
+    closed_percentile: float = 5.0,
+) -> dict[str, object]:
     open_stages = {"open", "open_relaxed", "open_wide", "both_open_relaxed", "both_open_wide", "open_confirm"}
     closed_stages = {"closed", "both_closed"}
+    open_rows = [row for row in rows if row["stage"] in open_stages]
+    closed_rows = [row for row in rows if row["stage"] in closed_stages]
+
+    def _model_values(side: str, source_rows: list[dict[str, object]]) -> list[float]:
+        out: list[float] = []
+        for row in source_rows:
+            value = row.get(f"{side}_model_openness")
+            if value in (None, ""):
+                continue
+            try:
+                out.append(float(value))
+            except (TypeError, ValueError):
+                continue
+        return out
 
     def side_payload(side: str) -> dict[str, object]:
-        open_rows = [row for row in rows if row["stage"] in open_stages]
-        closed_rows = [row for row in rows if row["stage"] in closed_stages]
         open_scores = [float(row[f"{side}_score"]) for row in open_rows]
         closed_scores = [float(row[f"{side}_score"]) for row in closed_rows]
         open_apertures = [float(row[f"{side}_aperture_height"]) for row in open_rows]
@@ -283,7 +366,7 @@ def build_calibration(rows: list[dict[str, object]], csv_path: Path, options: Op
         closed_peaks = [float(row[f"{side}_peak_dark_fraction"]) for row in closed_rows]
         open_score = median(open_scores)
         closed_score = median(closed_scores)
-        return {
+        payload: dict[str, object] = {
             "open_score_median": open_score,
             "closed_score_median": closed_score,
             "range": open_score - closed_score,
@@ -294,15 +377,29 @@ def build_calibration(rows: list[dict[str, object]], csv_path: Path, options: Op
             "open_samples": len(open_scores),
             "closed_samples": len(closed_scores),
         }
+        # v2: per-eye open_p95 / closed_p05 on the model's openness_lr (the value the
+        # runtime normalize_per_eye consumes), when --model-openness was captured.
+        open_model = _model_values(side, open_rows)
+        closed_model = _model_values(side, closed_rows)
+        if open_model and closed_model:
+            payload["open_p95"] = float(np.percentile(open_model, open_percentile))
+            payload["closed_p05"] = float(np.percentile(closed_model, closed_percentile))
+            payload["model_open_samples"] = len(open_model)
+            payload["model_closed_samples"] = len(closed_model)
+        return payload
 
+    left = side_payload("left")
+    right = side_payload("right")
+    has_model = "open_p95" in left or "open_p95" in right
     return {
-        "schema": "dreamair.openness_calibration.v1",
+        "schema": "dreamair.openness_calibration.v2" if has_model else "dreamair.openness_calibration.v1",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "csv": str(csv_path.resolve()),
         "score": "aperture_height * peak_dark_fraction",
+        "source": "guided_capture_model_openness" if has_model else "guided_capture_heuristic",
         "roi": [options.roi_x0, options.roi_y0, options.roi_x1, options.roi_y1],
-        "left": side_payload("left"),
-        "right": side_payload("right"),
+        "left": left,
+        "right": right,
     }
 
 

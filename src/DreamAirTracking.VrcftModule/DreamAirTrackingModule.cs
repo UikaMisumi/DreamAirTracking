@@ -38,6 +38,7 @@ public sealed class DreamAirTrackingModule : ExtTrackingModule
     private bool _enableEyeExpression;
     private bool _enablePupilDiameter = true;
     private bool _logPupilDiagnostics;
+    private float _wideOpennessBoost = 1.0f;
     private float _pupilMinMm = DefaultPupilMinMm;
     private float _pupilMaxMm = DefaultPupilMaxMm;
     private float _pupilSmoothing = DefaultPupilSmoothing;
@@ -64,6 +65,9 @@ public sealed class DreamAirTrackingModule : ExtTrackingModule
         _enableEyeExpression = requestedEyeExpression && expressionAvailable;
         _enablePupilDiameter = ReadBoolEnv("DREAMAIR_VRCFT_ENABLE_PUPIL_DIAMETER", true);
         _logPupilDiagnostics = ReadBoolEnv("DREAMAIR_VRCFT_LOG_PUPIL", false);
+        // D: on strong "eye wide", nudge openness toward fully-open (Eye bucket = ours; no SR conflict).
+        // 0 disables; >1 makes it snap harder (push = clamp(wide * boost, 0, 1)).
+        _wideOpennessBoost = Math.Clamp(ReadFloatEnv("DREAMAIR_VRCFT_WIDE_OPENNESS_BOOST", 1.0f), 0.0f, 4.0f);
         if (!_enableEyeTracking)
         {
             Logger?.LogInformation("DreamAirTracking eye output is disabled by DREAMAIR_VRCFT_ENABLE_EYE_TRACKING.");
@@ -270,8 +274,17 @@ public sealed class DreamAirTrackingModule : ExtTrackingModule
             ClampSigned(((float)eye.NormalizedY * _yGain * _ySign) + _yOffset));
     }
 
-    private static float ToOpenness(BridgeEyeState eye)
-        => Math.Clamp((float)eye.Openness, 0.0f, 1.0f);
+    private float ToOpenness(BridgeEyeState eye)
+    {
+        float o = Math.Clamp((float)eye.Openness, 0.0f, 1.0f);
+        if (_wideOpennessBoost > 0.0f)
+        {
+            // D: push openness toward 1.0 proportional to the shaped "eye wide" so wide eyes read fully open.
+            float push = Math.Clamp((float)eye.Wide * _wideOpennessBoost, 0.0f, 1.0f);
+            o = Math.Clamp(o + (1.0f - o) * push, 0.0f, 1.0f);
+        }
+        return o;
+    }
 
     private bool TryGetPupilDiameterMm(BridgeEyeState eye, string mode, ref float lastMm, out float pupilMm)
     {

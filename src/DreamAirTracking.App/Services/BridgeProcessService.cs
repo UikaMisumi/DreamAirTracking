@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using DreamAirTracking.Core.Models;
+using DreamAirTracking.Core.Runtime;
 
 namespace DreamAirTracking.App.Services;
 
@@ -23,6 +24,7 @@ public sealed class BridgeProcessService
     private const string DefaultExpressionRun = "eye_multitask_siamese_v4_round8_headmask_freezebn_20260618";
 
     private Process? _process;
+    private readonly NativeRuntimeHost _nativeHost = new();
     private readonly string _optionsPath;
     private readonly string _launchStatusPath;
     private readonly string _vrcftOutputOptionsPath;
@@ -44,9 +46,9 @@ public sealed class BridgeProcessService
 
     public event EventHandler? StateChanged;
 
-    public bool IsRunning => IsOwnedProcessRunning || IsLegacyBridgeRunning();
+    public bool IsRunning => IsOwnedProcessRunning || _nativeHost.IsRunning || IsLegacyBridgeRunning();
 
-    public bool IsExternalRunning => !IsOwnedProcessRunning && IsLegacyBridgeRunning();
+    public bool IsExternalRunning => !IsOwnedProcessRunning && !_nativeHost.IsRunning && IsLegacyBridgeRunning();
 
     public string? ProfilePath => ResolveOnnxPath(FindRepoRoot());
 
@@ -61,6 +63,20 @@ public sealed class BridgeProcessService
         : LastOutput;
 
     public BridgeLaunchOptions Options { get; private set; }
+
+    /// <summary>Switch between the Python runtime and the in-process native ONNX runtime (E11).</summary>
+    public void SetRuntimeEngine(string engine)
+    {
+        var normalized = string.Equals(engine, "native", StringComparison.OrdinalIgnoreCase) ? "native" : "python";
+        if (string.Equals(Options.RuntimeEngine, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Options.RuntimeEngine = normalized;
+        SaveOptions();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public string CurrentMultitaskModelPreset => NormalizeMultitaskModelPreset(Options.MultitaskModelPreset);
 
@@ -212,7 +228,7 @@ public sealed class BridgeProcessService
 
     public async Task StartAsync(string? profilePath = null, bool restartIfRunning = false)
     {
-        if (IsOwnedProcessRunning)
+        if (IsOwnedProcessRunning || _nativeHost.IsRunning)
         {
             if (!restartIfRunning)
             {
@@ -259,6 +275,36 @@ public sealed class BridgeProcessService
             LastOutput = $"BrokenEye HTTP is not ready on 127.0.0.1:{BrokenEyePort}. Open BrokenEye and start its eye streams before starting eye tracking.";
             WriteLaunchStatus("waiting_for_brokeneye", repoRoot, onnxPath, metadataPath, LastOutput);
             StateChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        if (IsMultitaskRuntime && string.Equals(Options.RuntimeEngine, "native", StringComparison.OrdinalIgnoreCase))
+        {
+            var nativeConfig = BuildNativeConfig(onnxPath, metadataPath, expressionOnnxPath, expressionMetadataPath);
+            LastRuntimeCommand = "native (in-process Microsoft.ML.OnnxRuntime)";
+            var nativeStarted = _nativeHost.Start(
+                nativeConfig,
+                onStopped: () =>
+                {
+                    LastOutput = "Eye tracking runtime stopped.";
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                },
+                onError: ex =>
+                {
+                    LastOutput = $"Native runtime error: {ex.Message}";
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                });
+            if (!nativeStarted)
+            {
+                LastOutput = $"{LastOutput} (native runtime failed to initialize)";
+                WriteLaunchStatus("failed", repoRoot, onnxPath, metadataPath, LastOutput);
+                StateChanged?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+            LastOutput = "Eye tracking runtime starting (native)...";
+            WriteLaunchStatus("started", repoRoot, onnxPath, metadataPath, null);
+            StateChanged?.Invoke(this, EventArgs.Empty);
+            _ = ProbeWearTemplateAsync(repoRoot, _launchAttempt);
             return;
         }
 
@@ -334,6 +380,11 @@ public sealed class BridgeProcessService
     public void Stop()
     {
         var stoppedAny = false;
+        if (_nativeHost.IsRunning)
+        {
+            _nativeHost.Stop();
+            stoppedAny = true;
+        }
         if (_process is not null)
         {
             try
@@ -546,6 +597,24 @@ public sealed class BridgeProcessService
             startInfo.ArgumentList.Add(Format(Options.OpennessBoostKnee));
             startInfo.ArgumentList.Add("--openness-boost-gamma");
             startInfo.ArgumentList.Add(Format(Options.OpennessBoostGamma));
+            startInfo.ArgumentList.Add("--tracking-openness-machine");
+            startInfo.ArgumentList.Add(Options.EnableTrackingStateMachine ? "on" : "off");
+            startInfo.ArgumentList.Add(
+                Options.EnableTrackingStateMachine && Options.EnableClosureGazeHold
+                    ? "--tracking-gaze-hold"
+                    : "--no-tracking-gaze-hold");
+            startInfo.ArgumentList.Add("--tracking-close-confirm-frames");
+            startInfo.ArgumentList.Add(Math.Max(0, Options.TrackingCloseConfirmFrames).ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add("--tracking-close-confirm-floor");
+            startInfo.ArgumentList.Add(Format(Options.TrackingCloseConfirmFloor));
+            startInfo.ArgumentList.Add("--tracking-partial-deadband");
+            startInfo.ArgumentList.Add(Format(Options.TrackingPartialDeadband));
+            var perEyeCalibrationPath = ResolveOpennessPerEyeCalibrationPath(FindRepoRoot());
+            if (!string.IsNullOrWhiteSpace(perEyeCalibrationPath))
+            {
+                startInfo.ArgumentList.Add("--openness-per-eye-calibration");
+                startInfo.ArgumentList.Add(perEyeCalibrationPath);
+            }
             startInfo.ArgumentList.Add("--ema-alpha");
             startInfo.ArgumentList.Add(Format(Options.EmaAlpha));
             startInfo.ArgumentList.Add("--max-step");
@@ -991,6 +1060,43 @@ public sealed class BridgeProcessService
             .FirstOrDefault();
     }
 
+    private string? ResolveOpennessPerEyeCalibrationPath(string repoRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(Options.OpennessPerEyeCalibrationPath) && File.Exists(Options.OpennessPerEyeCalibrationPath))
+        {
+            return Options.OpennessPerEyeCalibrationPath;
+        }
+
+        // Per-eye normalization needs a v2 calibration (open_p95/closed_p05). Find the newest
+        // openness_calibration.json under the repo that is v2; ignore legacy v1 files (for the
+        // dead image-openness branch) so a stale pinned v1 never masks a fresh v2 calibration.
+        try
+        {
+            return Directory.EnumerateFiles(repoRoot, "openness_calibration.json", SearchOption.AllDirectories)
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .Where(file => IsV2OpennessCalibration(file.FullName))
+                .Select(file => file.FullName)
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsV2OpennessCalibration(string path)
+    {
+        try
+        {
+            return File.ReadAllText(path).Contains("\"open_p95\"", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private BridgeLaunchOptions LoadOptions()
     {
         try
@@ -1053,6 +1159,67 @@ public sealed class BridgeProcessService
         return Options.EnablePupilDiameter ? "model_radius" : "off";
     }
 
+    // Maps BridgeLaunchOptions onto the native runtime config, matching exactly what
+    // AddRuntimeArguments passes to predict_live_multitask.py so native == python behavior.
+    private NeuralRuntimeConfig BuildNativeConfig(string onnxPath, string? metadataPath,
+        string? expressionOnnxPath, string? expressionMetadataPath)
+    {
+        var cfg = new NeuralRuntimeConfig
+        {
+            MainOnnxPath = onnxPath,
+            ImageSize = EyeModelMetadata.ReadImageSize(metadataPath, 128),
+            ExpressionOnnxPath = !string.IsNullOrWhiteSpace(expressionOnnxPath) && File.Exists(expressionOnnxPath) ? expressionOnnxPath : null,
+            ExpressionImageSize = EyeModelMetadata.ReadImageSize(expressionMetadataPath, 128),
+            ExpressionEveryNFrames = 3,
+            ExpressionEmaAlpha = 0.65,
+            OnnxThreads = 2,
+            OpennessCurveMode = string.IsNullOrWhiteSpace(Options.OpennessCurveMode) ? "soft_open_plateau" : Options.OpennessCurveMode,
+            OpennessFullOpenThreshold = Options.OpennessFullOpenThreshold,
+            OpennessBoostKnee = Options.OpennessBoostKnee,
+            OpennessBoostGamma = Options.OpennessBoostGamma,
+            CenterOffsetX = Options.CenterOffsetX,
+            CenterOffsetY = Options.CenterOffsetY,
+            XGain = Options.XGain,
+            YGain = Options.YGain,
+            Clamp = Options.Clamp,
+            ClampMode = string.IsNullOrWhiteSpace(Options.ClampMode) ? "soft" : Options.ClampMode,
+            SoftKnee = Options.SoftKnee,
+            EmaAlpha = Options.EmaAlpha,
+            MaxStep = Options.MaxStep,
+            OutputMapMode = string.IsNullOrWhiteSpace(Options.OutputMapMode) ? "off" : Options.OutputMapMode,
+            OutputDeadzone = Options.OutputDeadzone,
+            OutputCurveGamma = Options.OutputCurveGamma,
+            OutputCenterRadius = Options.OutputCenterRadius,
+            OutputCenterTau = Options.OutputCenterTau,
+            OutputCenterMaxStep = Options.OutputCenterMaxStep,
+            TrackingOpennessMachine = Options.EnableTrackingStateMachine,
+            TrackingGazeHold = Options.EnableTrackingStateMachine && Options.EnableClosureGazeHold,
+            TrackingCloseConfirmFrames = Math.Max(0, Options.TrackingCloseConfirmFrames),
+            TrackingCloseConfirmFloor = Options.TrackingCloseConfirmFloor,
+            TrackingPartialDeadband = Options.TrackingPartialDeadband,
+            WideSource = "model_head",
+            EyeShapeWideScale = Options.EyeShapeWideScale,
+            EyeShapeSquintScale = Options.EyeShapeSquintScale,
+            EyeShapeGamma = Options.EyeShapeGamma,
+            EyeShapeDeadzone = Options.EyeShapeDeadzone,
+            PupilWideEnterThreshold = Options.PupilWideEnterThreshold,
+            PupilWideExitThreshold = Options.PupilWideExitThreshold,
+            PupilWideHoldFrames = Math.Max(0, Options.PupilWideHoldFrames),
+            PupilWideEmaAlpha = Options.PupilWideEmaAlpha,
+            PupilOutputMode = ResolvePupilOutputMode(),
+            EyeExpressionMode = Options.EnableVrcftEyeExpressions ? "steamlink_eye_shapes" : "off",
+            UdpPort = 9400,
+            MonitorUdpPort = 9401,
+        };
+        var perEyeCalPath = ResolveOpennessPerEyeCalibrationPath(FindRepoRoot());
+        if (EyeModelMetadata.TryLoadPerEyeCalibration(perEyeCalPath, out var openP95, out var closedP05))
+        {
+            cfg.OpenP95 = openP95;
+            cfg.ClosedP05 = closedP05;
+        }
+        return cfg;
+    }
+
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static void NormalizeLoadedOptions(BridgeLaunchOptions options)
@@ -1073,6 +1240,12 @@ public sealed class BridgeProcessService
             options.NormalizationMode = "probe_only";
         }
 
+        if (!string.Equals(options.RuntimeEngine, "python", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(options.RuntimeEngine, "native", StringComparison.OrdinalIgnoreCase))
+        {
+            options.RuntimeEngine = "native"; // empty/invalid -> native (E11, on-headset validated); explicit python/native preserved
+        }
+
         if (string.IsNullOrWhiteSpace(options.RuntimeModelType)
             || string.Equals(options.RuntimeModelType, "gaze_only", StringComparison.OrdinalIgnoreCase))
         {
@@ -1089,8 +1262,9 @@ public sealed class BridgeProcessService
             options.EnableMultitaskVrcftOutput = true;
         }
 
-        // Keep the VRCFT expression slot free for SRanipal by default.
-        options.EnableVrcftEyeExpressions = false;
+        // Eye shapes (EyeWide/EyeSquint) are user-controlled. With the fused VRCFT module
+        // DreamAirTracking owns the Expression slot (and proxies the SRanipal mouth into it), so
+        // eye-wide is ours to drive — honor the loaded/UI value instead of forcing it off.
 
         if (options.MultitaskModelPreset == DefaultMultitaskModelPreset
             && IsNonDefaultMultitaskPath(options.MultitaskOnnxPath))

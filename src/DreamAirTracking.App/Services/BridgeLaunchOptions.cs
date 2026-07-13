@@ -8,6 +8,8 @@ public sealed class BridgeLaunchOptions
     public bool EnableVrcftEyeExpressions { get; set; }
     public bool AutoStartEyeTracking { get; set; } = true;
     public string RuntimeModelType { get; set; } = "multitask";
+    // "native" = in-process C# ONNX runtime (E11, default — validated on-headset); "python" = legacy predict_live_multitask.py
+    public string RuntimeEngine { get; set; } = "native";
     public bool EnableMultitaskVrcftOutput { get; set; } = true;
     public double VrcftOutputXOffset { get; set; }
     public double VrcftOutputYOffset { get; set; }
@@ -46,6 +48,14 @@ public sealed class BridgeLaunchOptions
     public string OpennessMode { get; set; } = "image";
     public string OpennessCurveMode { get; set; } = "blink_s_curve";
     public string? OpennessCalibrationPath { get; set; }
+    public string? OpennessPerEyeCalibrationPath { get; set; }
+    public bool EnableTrackingStateMachine { get; set; } = true;
+    public bool EnableClosureGazeHold { get; set; } = true;
+    // P0-3: closure needs N consecutive frames below threshold before it reads closed (transient
+    // shake dips never confirm); unconfirmed closures are floored; half-open band gets a deadband.
+    public int TrackingCloseConfirmFrames { get; set; } = 3;
+    public double TrackingCloseConfirmFloor { get; set; } = 0.22;
+    public double TrackingPartialDeadband { get; set; } = 0.04;
     public double OpennessBoostGamma { get; set; } = 1.25;
     public double OpennessFullOpenThreshold { get; set; } = 0.90;
     public double OpennessBoostKnee { get; set; } = 0.28;

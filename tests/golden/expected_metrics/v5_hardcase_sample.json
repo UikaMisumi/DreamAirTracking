@@ -1,0 +1,16 @@
+{
+  "row_count": 1369,
+  "fps": 231.54,
+  "left_openness_median": 1.0,
+  "right_openness_median": 0.989142,
+  "by_stage": {
+    "-": {
+      "count": 1369,
+      "smooth_median": [
+        -0.003543,
+        -0.025938
+      ],
+      "openness_min_median": 0.890803
+    }
+  }
+}

@@ -13,6 +13,7 @@ public sealed partial class HomePage : Page
     private bool _autoStartInFlight;
     private bool _manualStopRequested;
     private bool _loadingModelPreset;
+    private bool _loadingEngineToggle;
     private readonly DispatcherTimer _autoStartTimer = new()
     {
         Interval = TimeSpan.FromSeconds(5)
@@ -28,6 +29,7 @@ public sealed partial class HomePage : Page
     {
         BridgeProcessService.Instance.StateChanged += Bridge_StateChanged;
         SyncModelPresetBox();
+        SyncEngineToggle();
         UpdateStatus();
         _autoStartTimer.Start();
         await TryAutoStartAsync();
@@ -107,6 +109,45 @@ public sealed partial class HomePage : Page
             catch (Exception ex)
             {
                 BridgeOutputText.Text = $"Eye tracking runtime failed to restart: {ex.Message}";
+            }
+        }
+
+        UpdateStatus();
+    }
+
+    private void SyncEngineToggle()
+    {
+        _loadingEngineToggle = true;
+        try
+        {
+            EngineToggle.IsOn = string.Equals(
+                BridgeProcessService.Instance.Options.RuntimeEngine, "native", StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            _loadingEngineToggle = false;
+        }
+    }
+
+    private async void EngineToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loadingEngineToggle)
+        {
+            return;
+        }
+
+        var bridge = BridgeProcessService.Instance;
+        var wasRunning = bridge.IsRunning && !bridge.IsExternalRunning;
+        bridge.SetRuntimeEngine(EngineToggle.IsOn ? "native" : "python");
+        if (wasRunning)
+        {
+            try
+            {
+                await bridge.StartAsync(restartIfRunning: true);
+            }
+            catch (Exception ex)
+            {
+                BridgeOutputText.Text = $"Failed to switch runtime engine: {ex.Message}";
             }
         }
 

@@ -1,0 +1,14 @@
+{
+  "model": "<absolute path to model.onnx>",
+  "metadata": "<absolute path to metadata.json>",
+  "recordings": [
+    {
+      "name": "example_open_closed_blink",
+      "manifest": "<absolute path to a recording manifest CSV with left_file,right_file[,stage] columns>",
+      "limit": 300,
+      "fps": 120,
+      "duration_seconds": 6,
+      "runtime_flags": ["--tracking-openness-machine", "on", "--tracking-gaze-hold"]
+    }
+  ]
+}

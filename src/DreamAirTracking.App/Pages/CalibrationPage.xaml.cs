@@ -229,14 +229,9 @@ public sealed partial class CalibrationPage : Page
     }
 
     private Task StartEyelidCalibrationAsync()
-    {
-        StartOpennessProcess(
-            outputSubdirectory: IOPath.Combine("runs", "fullparam_capture", $"eyelid_app_{DateTime.Now:yyyyMMdd_HHmmss}"),
-            extraArguments: "--preset training --settle-seconds 0.8 --stage-seconds 2.0 --save-training-images --validation-every 999 --beep --model-openness",
-            title: "Eyelid calibration",
-            message: "Follow the prompts. The result becomes the current eyelid calibration and exports a training package automatically.");
-        return Task.CompletedTask;
-    }
+        // The main eyelid entry now runs the in-app RAMP capture (voice-guided; time-progress
+        // labels). The old terminal protocol produced quantized stage-constant labels.
+        => StartRampCaptureAsync();
 
     private async Task StartPupilCalibrationAsync()
     {
@@ -364,7 +359,7 @@ public sealed partial class CalibrationPage : Page
 
         var progress = new Progress<EyelidRampCaptureService.RampProgress>(p =>
         {
-            RampPromptText.Text = $"{p.Prompt}  ({p.StageRemainingSeconds:0.0}s)";
+            RampPromptText.Text = $"{p.Prompt}  ({p.SegmentRemainingSeconds:0.0}s)";
             RampTargetBar.Value = p.TargetOpenness;
             RampTotalBar.Value = p.TotalFraction;
         });

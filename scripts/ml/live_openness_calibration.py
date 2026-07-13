@@ -342,6 +342,11 @@ def build_calibration(
 ) -> dict[str, object]:
     open_stages = {"open", "open_relaxed", "open_wide", "both_open_relaxed", "both_open_wide", "open_confirm"}
     closed_stages = {"closed", "both_closed"}
+    # S2: per-side half-open stages (the side that is half in asymmetric stages differs)
+    half_stages = {
+        "left": {"half_closed", "both_half", "left_half_right_open", "left_half_right_closed"},
+        "right": {"half_closed", "both_half", "left_open_right_half", "left_closed_right_half"},
+    }
     open_rows = [row for row in rows if row["stage"] in open_stages]
     closed_rows = [row for row in rows if row["stage"] in closed_stages]
 
@@ -386,6 +391,13 @@ def build_calibration(
             payload["closed_p05"] = float(np.percentile(closed_model, closed_percentile))
             payload["model_open_samples"] = len(open_model)
             payload["model_closed_samples"] = len(closed_model)
+            # S2 half anchor: median model openness while this eye held half-open. The
+            # runtime piecewise map pins it to 0.5 (it validates segment widths itself).
+            half_rows = [row for row in rows if row["stage"] in half_stages[side]]
+            half_model = _model_values(side, half_rows)
+            if len(half_model) >= 10:
+                payload["half_p50"] = float(np.percentile(half_model, 50.0))
+                payload["model_half_samples"] = len(half_model)
         return payload
 
     left = side_payload("left")

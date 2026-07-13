@@ -77,6 +77,36 @@ public sealed class PostProcessParityTests
     }
 
     [Fact]
+    public void NormalizePerEyeHalfAnchorParity()
+    {
+        int i = 0;
+        foreach (var c in Fx.GetProperty("normalize_per_eye_half").EnumerateArray())
+        {
+            var got = PerEyeOpennessNormalizer.Normalize(P(c.GetProperty("model")), P(c.GetProperty("open_p95")),
+                P(c.GetProperty("closed_p05")), D(c, "min_range", 0.05), P(c.GetProperty("half_p50")));
+            Eq(P(c.GetProperty("output")), got, $"normalize_per_eye_half[{i++}]");
+        }
+    }
+
+    [Fact]
+    public void OpennessDualPathParity()
+    {
+        foreach (var grp in Fx.GetProperty("openness_dual_path").EnumerateArray())
+        {
+            var dp = new OpennessDualPath();
+            double threshold = D(grp, "threshold", 0.90), knee = D(grp, "knee", 0.28), gamma = D(grp, "gamma", 1.25);
+            double enter = D(grp, "enter_velocity", 0.06), exit = D(grp, "exit_velocity", 0.02);
+            int hold = grp.TryGetProperty("hold_frames", out var h) ? h.GetInt32() : 6;
+            int i = 0;
+            foreach (var s in grp.GetProperty("steps").EnumerateArray())
+            {
+                var got = dp.Apply(P(s.GetProperty("input")), threshold, knee, gamma, enter, exit, hold);
+                Eq(P(s.GetProperty("output")), got, $"openness_dual_path[{i++}]");
+            }
+        }
+    }
+
+    [Fact]
     public void EyeShapeCurveParity()
     {
         int i = 0;

@@ -55,6 +55,42 @@ for m, hi, lo in cases:
     npe.append({"model": m, "open_p95": hi, "closed_p05": lo, "min_range": 0.05, "output": arr(out)})
 fx["normalize_per_eye"] = npe
 
+# ---- normalize_per_eye with S2 half anchor (piecewise) ----
+npeh = []
+half_cases = [
+    ([0.7, 0.9], [1.0, 1.0], [0.1, 0.68], [0.7, 0.9]),       # anchors pinned to 0.5 (right = collapsed range)
+    ([0.4, 0.95], [1.0, 1.0], [0.1, 0.68], [0.7, 0.9]),      # below/above anchor
+    ([0.55, 0.55], [1.0, 1.0], [0.1, 0.1], [0.11, 0.999]),   # degenerate segments -> linear fallback
+    ([0.3, 0.8], [0.95, 0.9], [0.05, 0.1], [0.5, 0.55]),
+]
+for m, hi, lo, half in half_cases:
+    out = P.normalize_per_eye(
+        np.array(m, dtype=np.float32), np.array(hi, dtype=np.float32), np.array(lo, dtype=np.float32),
+        half_p50=np.array(half, dtype=np.float32))
+    npeh.append({"model": m, "open_p95": hi, "closed_p05": lo, "half_p50": half, "min_range": 0.05, "output": arr(out)})
+fx["normalize_per_eye_half"] = npeh
+
+# ---- openness dual_path (S1, stateful sequence) ----
+def dual_path_seq(seq, threshold=0.90, knee=0.28, gamma=1.25, enter=0.06, exit_=0.02, hold=6):
+    dp = P.OpennessDualPath()
+    steps = []
+    for v in seq:
+        out = dp.apply(np.array(v, dtype=np.float32), threshold, knee, gamma, enter, exit_, hold)
+        steps.append({"input": v, "output": arr(out)})
+    return steps
+
+dp_seq = (
+    [[1.0, 1.0]] * 3
+    + [[round(1.0 - 0.01 * i, 4)] * 2 for i in range(1, 41)]   # slow ramp to 0.6 (hover path)
+    + [[0.6, 0.6], [0.2, 0.2], [0.03, 0.03], [0.03, 0.03]]      # blink drop (fast path)
+    + [[0.5, 0.5], [0.97, 0.97], [1.0, 1.0], [1.0, 1.0]]        # reopen
+)
+fx["openness_dual_path"] = [{
+    "threshold": 0.90, "knee": 0.28, "gamma": 1.25,
+    "enter_velocity": 0.06, "exit_velocity": 0.02, "hold_frames": 6,
+    "steps": dual_path_seq(dp_seq),
+}]
+
 # ---- eye_shape_curve ----
 esc = []
 for v in [[0.0, 0.5], [0.3, 0.9], [0.6, 1.0], [0.03, 0.05]]:

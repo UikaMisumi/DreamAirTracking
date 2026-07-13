@@ -595,6 +595,12 @@ public sealed class BridgeProcessService
             startInfo.ArgumentList.Add(Format(Options.WideGazeUpSign));
             startInfo.ArgumentList.Add("--openness-curve-mode");
             startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(Options.OpennessCurveMode) ? "soft_open_plateau" : Options.OpennessCurveMode);
+            startInfo.ArgumentList.Add("--openness-hover-enter-velocity");
+            startInfo.ArgumentList.Add(Format(Options.OpennessHoverEnterVelocity));
+            startInfo.ArgumentList.Add("--openness-hover-exit-velocity");
+            startInfo.ArgumentList.Add(Format(Options.OpennessHoverExitVelocity));
+            startInfo.ArgumentList.Add("--openness-hover-hold-frames");
+            startInfo.ArgumentList.Add(Math.Max(1, Options.OpennessHoverHoldFrames).ToString(CultureInfo.InvariantCulture));
             startInfo.ArgumentList.Add("--openness-full-open-threshold");
             startInfo.ArgumentList.Add(Format(Options.OpennessFullOpenThreshold));
             startInfo.ArgumentList.Add("--openness-boost-knee");
@@ -1218,11 +1224,15 @@ public sealed class BridgeProcessService
             MonitorUdpPort = 9401,
         };
         var perEyeCalPath = ResolveOpennessPerEyeCalibrationPath(FindRepoRoot());
-        if (EyeModelMetadata.TryLoadPerEyeCalibration(perEyeCalPath, out var openP95, out var closedP05))
+        if (EyeModelMetadata.TryLoadPerEyeCalibration(perEyeCalPath, out var openP95, out var closedP05, out var halfP50))
         {
             cfg.OpenP95 = openP95;
             cfg.ClosedP05 = closedP05;
+            cfg.HalfP50 = halfP50;
         }
+        cfg.OpennessHoverEnterVelocity = Options.OpennessHoverEnterVelocity;
+        cfg.OpennessHoverExitVelocity = Options.OpennessHoverExitVelocity;
+        cfg.OpennessHoverHoldFrames = Math.Max(1, Options.OpennessHoverHoldFrames);
         return cfg;
     }
 

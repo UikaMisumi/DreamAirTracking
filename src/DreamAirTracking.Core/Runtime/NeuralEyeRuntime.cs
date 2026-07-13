@@ -23,6 +23,7 @@ public sealed class NeuralEyeRuntime : IDisposable
     private readonly OutputGazeMapper _outputMapper;
     private readonly TrackingStateMachine _tracking;
     private readonly PupilWideHold _pupilWide;
+    private readonly OpennessDualPath _dualPath = new();
     private readonly string _pupilMode;
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
 
@@ -79,10 +80,14 @@ public sealed class NeuralEyeRuntime : IDisposable
         // openness chain
         EyePair modelOpenness = o.Openness;
         EyePair normOpenness = (_cfg.OpenP95 is EyePair hi && _cfg.ClosedP05 is EyePair lo)
-            ? PerEyeOpennessNormalizer.Normalize(modelOpenness, hi, lo)
+            ? PerEyeOpennessNormalizer.Normalize(modelOpenness, hi, lo, 0.05, _cfg.HalfP50)
             : modelOpenness;
-        EyePair curved = OpennessCurve.Apply(normOpenness, _cfg.OpennessCurveMode,
-            _cfg.OpennessFullOpenThreshold, _cfg.OpennessBoostKnee, _cfg.OpennessBoostGamma);
+        EyePair curved = _cfg.OpennessCurveMode == "dual_path"
+            ? _dualPath.Apply(normOpenness, _cfg.OpennessFullOpenThreshold, _cfg.OpennessBoostKnee,
+                _cfg.OpennessBoostGamma, _cfg.OpennessHoverEnterVelocity, _cfg.OpennessHoverExitVelocity,
+                _cfg.OpennessHoverHoldFrames)
+            : OpennessCurve.Apply(normOpenness, _cfg.OpennessCurveMode,
+                _cfg.OpennessFullOpenThreshold, _cfg.OpennessBoostKnee, _cfg.OpennessBoostGamma);
 
         double pairConf = o.Confidence.Length > 2 ? o.Confidence[2] : Math.Min(o.Confidence[0], o.Confidence[1]);
 

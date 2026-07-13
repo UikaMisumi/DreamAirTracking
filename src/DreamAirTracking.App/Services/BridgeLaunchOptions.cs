@@ -46,7 +46,11 @@ public sealed class BridgeLaunchOptions
     public double EmaAlpha { get; set; } = 0.35;
     public double MaxStep { get; set; }
     public string OpennessMode { get; set; } = "image";
-    public string OpennessCurveMode { get; set; } = "blink_s_curve";
+    // "dual_path" = S1 velocity-gated hover curve (blink stays snappy, slow half-open reads linear)
+    public string OpennessCurveMode { get; set; } = "dual_path";
+    public double OpennessHoverEnterVelocity { get; set; } = 0.06;
+    public double OpennessHoverExitVelocity { get; set; } = 0.02;
+    public int OpennessHoverHoldFrames { get; set; } = 6;
     public string? OpennessCalibrationPath { get; set; }
     public string? OpennessPerEyeCalibrationPath { get; set; }
     public bool EnableTrackingStateMachine { get; set; } = true;

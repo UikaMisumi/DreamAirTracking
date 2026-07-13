@@ -29,6 +29,12 @@ public sealed class NeuralRuntimeConfig
     public double OpennessFullOpenThreshold { get; set; } = 0.90;
     public double OpennessBoostKnee { get; set; } = 0.28;
     public double OpennessBoostGamma { get; set; } = 1.25;
+    // S1 dual_path hover knobs (used when OpennessCurveMode == "dual_path")
+    public double OpennessHoverEnterVelocity { get; set; } = 0.06;
+    public double OpennessHoverExitVelocity { get; set; } = 0.02;
+    public int OpennessHoverHoldFrames { get; set; } = 6;
+    // S2 optional half-open anchor from the v2 calibration (piecewise-linear normalize)
+    public EyePair? HalfP50 { get; set; }
     // optional per-eye calibration (v2 open_p95/closed_p05); null => identity
     public EyePair? OpenP95 { get; set; }
     public EyePair? ClosedP05 { get; set; }

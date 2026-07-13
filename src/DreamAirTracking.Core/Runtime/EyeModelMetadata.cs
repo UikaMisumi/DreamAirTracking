@@ -23,9 +23,17 @@ public static class EyeModelMetadata
     /// Mirrors Python load_per_eye_openness_calibration; returns false for missing/v1/invalid files.
     /// </summary>
     public static bool TryLoadPerEyeCalibration(string? path, out EyePair openP95, out EyePair closedP05)
+        => TryLoadPerEyeCalibration(path, out openP95, out closedP05, out _);
+
+    /// <summary>
+    /// Also reads the optional S2 <c>half_p50</c> anchor (null on older v2 files) which drives the
+    /// piecewise-linear normalize pinning the user's half-open to 0.5.
+    /// </summary>
+    public static bool TryLoadPerEyeCalibration(string? path, out EyePair openP95, out EyePair closedP05, out EyePair? halfP50)
     {
         openP95 = default;
         closedP05 = default;
+        halfP50 = null;
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
         try
         {
@@ -38,6 +46,12 @@ public static class EyeModelMetadata
             if (!double.IsFinite(lop) || !double.IsFinite(rop) || !double.IsFinite(lcp) || !double.IsFinite(rcp)) return false;
             openP95 = new EyePair(lop, rop);
             closedP05 = new EyePair(lcp, rcp);
+            if (l.TryGetProperty("half_p50", out var lh) && r.TryGetProperty("half_p50", out var rh))
+            {
+                double lhp = lh.GetDouble(), rhp = rh.GetDouble();
+                if (double.IsFinite(lhp) && double.IsFinite(rhp))
+                    halfP50 = new EyePair(lhp, rhp);
+            }
             return true;
         }
         catch { return false; }

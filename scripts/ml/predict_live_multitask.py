@@ -204,36 +204,100 @@ def apply_openness_curve(
     return np.clip(curved, 0.0, 1.0).astype(np.float32)
 
 
+class OpennessDualPath:
+    """Velocity-gated dual-path openness curve (S1).
+
+    Half-open accuracy and blink snappiness want opposite curves: the s-curve
+    steepens the mid band (~1.9x) for crisp blinks, which makes hovering at a
+    half-open state impossible. So route by lid VELOCITY per eye:
+      - fast motion (a blink) -> the existing blink_s_curve (snappy, unchanged feel)
+      - slow motion (hover)   -> near-linear (v / full_open_threshold), mid slope
+        ~1.1 so intermediate positions read accurately and hold steady
+    A short per-eye crossfade between the paths avoids pops on mode switches.
+    Stateful: velocity comes from the previous frame's normalized input.
+    """
+
+    def __init__(self) -> None:
+        self._prev: "np.ndarray | None" = None
+        self._blend = np.zeros(2, dtype=np.float32)   # 0 = hover path, 1 = blink path
+        self._fast_hold = [0, 0]
+        self._blend_step = 0.34                        # ~3 frames to fully switch
+
+    def apply(
+        self,
+        values: np.ndarray,
+        full_open_threshold: float,
+        boost_knee: float,
+        boost_gamma: float,
+        enter_velocity: float = 0.06,
+        exit_velocity: float = 0.02,
+        hold_frames: int = 6,
+    ) -> np.ndarray:
+        x = np.clip(values.astype(np.float32), 0.0, 1.0)
+        prev = x if self._prev is None else self._prev
+        delta = np.abs(x - prev)
+        self._prev = x.copy()
+
+        fast_out = apply_openness_curve(x, "blink_s_curve", full_open_threshold, boost_knee, boost_gamma)
+        threshold = float(np.clip(full_open_threshold, 0.05, 1.0))
+        slow_out = np.clip(x / max(0.001, threshold), 0.0, 1.0)
+
+        out = np.zeros(2, dtype=np.float32)
+        for i in range(2):
+            if float(delta[i]) >= float(enter_velocity):
+                self._fast_hold[i] = max(1, int(hold_frames))
+            elif self._fast_hold[i] > 0 and float(delta[i]) <= float(exit_velocity):
+                self._fast_hold[i] -= 1
+            target = 1.0 if self._fast_hold[i] > 0 else 0.0
+            b = float(self._blend[i])
+            b = min(1.0, b + self._blend_step) if target > b else max(0.0, b - self._blend_step)
+            self._blend[i] = b
+            out[i] = b * float(fast_out[i]) + (1.0 - b) * float(slow_out[i])
+        return np.clip(out, 0.0, 1.0).astype(np.float32)
+
+
 def normalize_per_eye(
     model_openness: np.ndarray,
     open_p95: np.ndarray,
     closed_p05: np.ndarray,
     min_range: float = 0.05,
+    half_p50: "np.ndarray | None" = None,
 ) -> np.ndarray:
-    """Linearly normalize per-eye model openness using calibrated open/closed refs.
+    """Normalize per-eye model openness using calibrated refs.
 
-    Each eye: clip((v - closed_p05) / (open_p95 - closed_p05), 0, 1). When a
-    per-eye range is degenerate (< min_range) that eye passes through unchanged,
-    so an empty/bad calibration can never corrupt output. NaNs are coerced.
-    Mirrors the dead-legacy predict_live.calibrated_openness, vectorized per eye.
+    Linear: clip((v - closed_p05) / (open_p95 - closed_p05), 0, 1). With a valid
+    half anchor (S2 / P0-4): piecewise-linear pinning the user's calibrated
+    half-open to exactly 0.5 — [closed..half] -> [0..0.5], [half..open] -> [0.5..1].
+    A degenerate segment (< min_range/2 wide) falls back to the linear map for
+    that eye; a degenerate full range passes through unchanged, so an empty/bad
+    calibration can never corrupt output. NaNs are coerced.
     """
     x = np.clip(np.nan_to_num(model_openness.astype(np.float32), nan=0.0), 0.0, 1.0)
     hi = np.broadcast_to(np.nan_to_num(np.asarray(open_p95, dtype=np.float32), nan=1.0), x.shape).astype(np.float32)
     lo = np.broadcast_to(np.nan_to_num(np.asarray(closed_p05, dtype=np.float32), nan=0.0), x.shape).astype(np.float32)
     rng = hi - lo
     scaled = (x - lo) / np.maximum(rng, 1e-6)
+    if half_p50 is not None:
+        mid = np.broadcast_to(np.nan_to_num(np.asarray(half_p50, dtype=np.float32), nan=-1.0), x.shape).astype(np.float32)
+        seg_min = float(min_range) * 0.5
+        half_ok = (mid - lo >= seg_min) & (hi - mid >= seg_min)
+        low_seg = 0.5 * (x - lo) / np.maximum(mid - lo, 1e-6)
+        high_seg = 0.5 + 0.5 * (x - mid) / np.maximum(hi - mid, 1e-6)
+        piecewise = np.where(x <= mid, low_seg, high_seg)
+        scaled = np.where(half_ok, piecewise, scaled)
     out = np.where(rng >= float(min_range), scaled, x)
     return np.clip(out, 0.0, 1.0).astype(np.float32)
 
 
 def load_per_eye_openness_calibration(
     path: "Path | None",
-) -> "tuple[np.ndarray, np.ndarray] | None":
-    """Load per-eye (open_p95, closed_p05) from a v2 openness_calibration.json.
+) -> "tuple[np.ndarray, np.ndarray, np.ndarray | None] | None":
+    """Load per-eye (open_p95, closed_p05, half_p50?) from a v2 openness_calibration.json.
 
-    Returns (open_p95[2], closed_p05[2]) or None when the path is missing, the
-    file is absent/unreadable, or lacks per-eye model p95/p05 fields (e.g. a
-    v1-only file). None -> caller keeps raw model openness (identity, harmless).
+    Returns (open_p95[2], closed_p05[2], half_p50[2] | None) or None when the path
+    is missing, unreadable, or lacks per-eye model p95/p05 fields (e.g. a v1-only
+    file). half_p50 is the optional S2 half-open anchor (older v2 files lack it ->
+    None -> linear map). None overall -> caller keeps raw model openness.
     """
     if path is None:
         return None
@@ -250,7 +314,14 @@ def load_per_eye_openness_calibration(
         return None
     if not np.all(np.isfinite(open_p95)) or not np.all(np.isfinite(closed_p05)):
         return None
-    return open_p95, closed_p05
+    half_p50 = None
+    try:
+        half = np.array([float(left["half_p50"]), float(right["half_p50"])], dtype=np.float32)
+        if np.all(np.isfinite(half)):
+            half_p50 = half
+    except (ValueError, KeyError, TypeError):
+        half_p50 = None
+    return open_p95, closed_p05, half_p50
 
 
 def apply_eye_shape_curve(values: np.ndarray, scale: float, gamma: float, deadzone: float) -> np.ndarray:
@@ -803,7 +874,10 @@ def main() -> int:
     parser.add_argument("--pupil-wide-exit-threshold", type=float, default=0.86, help="Raw/model wide value below which pupil constriction assist fades out.")
     parser.add_argument("--pupil-wide-hold-frames", type=int, default=8, help="Frames to hold pupil constriction assist after a wide trigger.")
     parser.add_argument("--pupil-wide-ema-alpha", type=float, default=0.45, help="EMA alpha for pupil constriction assist wide amount.")
-    parser.add_argument("--openness-curve-mode", choices=("off", "full_open_plateau", "blink_s_curve", "soft_open_plateau"), default="blink_s_curve")
+    parser.add_argument("--openness-curve-mode", choices=("off", "full_open_plateau", "blink_s_curve", "soft_open_plateau", "dual_path"), default="blink_s_curve")
+    parser.add_argument("--openness-hover-enter-velocity", type=float, default=0.06, help="dual_path: per-frame openness delta that switches to the snappy blink path.")
+    parser.add_argument("--openness-hover-exit-velocity", type=float, default=0.02, help="dual_path: per-frame delta below which the blink path releases back to hover.")
+    parser.add_argument("--openness-hover-hold-frames", type=int, default=6, help="dual_path: frames the blink path is held after the last fast motion.")
     parser.add_argument("--openness-full-open-threshold", type=float, default=0.90)
     parser.add_argument("--openness-boost-knee", type=float, default=0.28)
     parser.add_argument("--openness-boost-gamma", type=float, default=1.25)
@@ -1005,6 +1079,7 @@ def main() -> int:
     pupil_wide_state = np.zeros(2, dtype=np.float32)
     pupil_wide_hold_remaining = np.zeros(2, dtype=np.int32)
     openness_cal = load_per_eye_openness_calibration(args.openness_per_eye_calibration)
+    dual_path = OpennessDualPath()
     if openness_cal is not None:
         print(
             f"Per-eye openness calibration: open_p95={openness_cal[0].tolist()} "
@@ -1092,16 +1167,29 @@ def main() -> int:
                         result["squint_lr"] = last_expression_result["squint_lr"]
                 model_openness = result["openness_lr"]
                 if openness_cal is not None:
-                    norm_openness = normalize_per_eye(model_openness, openness_cal[0], openness_cal[1])
+                    norm_openness = normalize_per_eye(
+                        model_openness, openness_cal[0], openness_cal[1], half_p50=openness_cal[2]
+                    )
                 else:
                     norm_openness = model_openness
-                curved = apply_openness_curve(
-                    norm_openness,
-                    args.openness_curve_mode,
-                    args.openness_full_open_threshold,
-                    args.openness_boost_knee,
-                    args.openness_boost_gamma,
-                )
+                if args.openness_curve_mode == "dual_path":
+                    curved = dual_path.apply(
+                        norm_openness,
+                        args.openness_full_open_threshold,
+                        args.openness_boost_knee,
+                        args.openness_boost_gamma,
+                        args.openness_hover_enter_velocity,
+                        args.openness_hover_exit_velocity,
+                        args.openness_hover_hold_frames,
+                    )
+                else:
+                    curved = apply_openness_curve(
+                        norm_openness,
+                        args.openness_curve_mode,
+                        args.openness_full_open_threshold,
+                        args.openness_boost_knee,
+                        args.openness_boost_gamma,
+                    )
                 confidence = result["confidence"]
                 frame_timestamp = max(left.received_at, right.received_at)
                 raw = result["gaze_xy"]

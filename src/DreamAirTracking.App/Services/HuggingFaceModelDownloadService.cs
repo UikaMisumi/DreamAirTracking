@@ -48,12 +48,9 @@ public sealed class HuggingFaceModelDownloadService
 
         var registry = await DownloadRegistryAsync(revision, cancellationToken);
         var siblingNames = ReadSiblingNames(metadata);
-        var package = CreateRemotePackage(registry, revision, lastModified, siblingNames);
-        var packages = package is null
-            ? Array.Empty<RemoteModelPackage>()
-            : new[] { package };
+        var packages = CreateRemotePackages(registry, revision, lastModified, siblingNames);
 
-        if (packages.Length == 0)
+        if (packages.Count == 0)
         {
             throw new InvalidDataException("No Dream Air model packages were listed in the Hugging Face model registry.");
         }
@@ -214,39 +211,53 @@ public sealed class HuggingFaceModelDownloadService
         }
     }
 
-    private static RemoteModelPackage? CreateRemotePackage(
+    // One downloadable package per role=main registry entry (each paired with the default
+    // expression model), so alternative model versions published in the same repo are
+    // individually selectable and downloadable in the app.
+    private static IReadOnlyList<RemoteModelPackage> CreateRemotePackages(
         ModelRegistry registry,
         string revision,
         DateTimeOffset? lastModified,
         HashSet<string> siblingNames)
     {
-        var main = registry.FindDefaultMain();
         var expression = registry.FindDefaultExpression();
-        if (main is null || expression is null)
+        if (expression is null)
         {
-            return null;
+            return Array.Empty<RemoteModelPackage>();
         }
-
-        var files = new List<string>();
-        AddModelFiles(files, main, siblingNames);
-        AddModelFiles(files, expression, siblingNames);
 
         var version = lastModified is null
             ? $"revision {ShortRevision(revision)}"
             : $"{lastModified.Value:yyyy.MM.dd} ({ShortRevision(revision)})";
 
-        return new RemoteModelPackage(
-            $"{main.Id}+{expression.Id}@{ShortRevision(revision)}",
-            version,
-            version,
-            main.Id,
-            expression.Id,
-            main.Runtime,
-            $"{main.Architecture} + expression auxiliary",
-            revision,
-            lastModified,
-            main.Outputs.Concat(expression.Outputs).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-            files.Where(file => !string.IsNullOrWhiteSpace(file)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+        var packages = new List<RemoteModelPackage>();
+        foreach (var main in registry.Models.Where(model =>
+                     model.Role.Equals("main", StringComparison.OrdinalIgnoreCase)))
+        {
+            var files = new List<string>();
+            AddModelFiles(files, main, siblingNames);
+            AddModelFiles(files, expression, siblingNames);
+
+            var label = string.IsNullOrWhiteSpace(main.DisplayName) ? main.Id : main.DisplayName;
+            packages.Add(new RemoteModelPackage(
+                $"{main.Id}+{expression.Id}@{ShortRevision(revision)}",
+                $"{label} — {version}",
+                version,
+                main.Id,
+                expression.Id,
+                main.Runtime,
+                $"{main.Architecture} + expression auxiliary",
+                revision,
+                lastModified,
+                main.Outputs.Concat(expression.Outputs).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                files.Where(file => !string.IsNullOrWhiteSpace(file)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
+        }
+
+        // default main first, then the alternates
+        return packages
+            .OrderByDescending(p => registry.FindById(p.MainModelId)?.Default == true)
+            .ThenBy(p => p.MainModelId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static void AddModelFiles(List<string> files, ModelRegistryEntry model, HashSet<string> siblingNames)
@@ -343,12 +354,28 @@ public sealed class HuggingFaceModelDownloadService
             File.Copy(path, target, overwrite: true);
         }
 
-        var registry = new ModelRegistry();
+        // Merge into the existing user registry (never wipe other installed presets):
+        // replace same-id entries, make the downloaded main the default, demote the rest.
+        var registryPath0 = ModelRegistry.DefaultUserRegistryPath();
+        var registry = ModelRegistry.TryLoad(registryPath0) ?? new ModelRegistry();
+        registry.Models.RemoveAll(model =>
+            model.Id.Equals(mainEntry.Id, StringComparison.OrdinalIgnoreCase) ||
+            model.Id.Equals(expressionEntry.Id, StringComparison.OrdinalIgnoreCase));
+        foreach (var model in registry.Models)
+        {
+            if (model.Role.Equals("main", StringComparison.OrdinalIgnoreCase))
+            {
+                model.Default = false;
+            }
+            else if (model.Role.Equals("expression", StringComparison.OrdinalIgnoreCase))
+            {
+                model.Default = false;
+            }
+        }
+
         var installedMain = CloneRegistryEntry(mainEntry);
-        installedMain.DisplayName = package.DisplayName;
         installedMain.Default = true;
         var installedExpression = CloneRegistryEntry(expressionEntry);
-        installedExpression.DisplayName = package.DisplayName;
         installedExpression.Default = true;
         registry.Models.Add(installedMain);
         registry.Models.Add(installedExpression);

@@ -110,11 +110,46 @@ def main() -> int:
     calibration_path = args.output_dir / "openness_calibration.json"
     status_path = args.output_dir / "latest_status.json"
 
+    if args.model_openness and args.model_onnx is None:
+        # Auto-resolve the model so the app can just pass --model-openness. Search the
+        # installed models dir first, then the launch dir (the app runs the script with
+        # cwd = repo root).
+        candidates: list[Path] = []
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            candidates += sorted((Path(local) / "DreamAirTracking" / "models").glob("*/model.onnx"))
+        candidates += sorted(Path.cwd().glob("models/*/model.onnx"))
+        candidates += sorted(Path.cwd().rglob("model.onnx"))[:10]
+        candidates += sorted(Path.cwd().rglob("eye_multitask.onnx"))[:10]
+        seen: set[str] = set()
+        candidates = [p for p in candidates if not (str(p) in seen or seen.add(str(p)))]
+
+        def _rank(p: Path) -> int:
+            s = str(p).lower()
+            if "expression" in s:
+                return 3  # expression ONNX does not drive openness_lr; least preferred
+            if "main" in s:
+                return 0
+            if "current" in s:
+                return 1
+            return 2
+
+        chosen = sorted(candidates, key=_rank)
+        if chosen:
+            args.model_onnx = chosen[0]
+            for meta in (chosen[0].parent / "metadata.json", chosen[0].with_name(chosen[0].stem + ".metadata.json")):
+                if args.model_metadata is None and meta.exists():
+                    args.model_metadata = meta
+                    break
+            print(f"Auto-resolved model: {args.model_onnx}")
+        else:
+            print("WARNING: --model-openness set but no model (model.onnx / eye_multitask.onnx) found; "
+                  "using v1 heuristic calibration.")
+            args.model_openness = False
+
     model_session = None
     model_image_size = 128
     if args.model_openness:
-        if args.model_onnx is None:
-            raise SystemExit("--model-openness requires --model-onnx")
         import onnxruntime as ort
 
         model_image_size = load_image_size(args.model_metadata.resolve() if args.model_metadata else None, 128)

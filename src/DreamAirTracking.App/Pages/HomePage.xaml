@@ -45,6 +45,14 @@
                         VerticalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Text="--" />
+                    <TextBlock VerticalAlignment="Center" Text="Engine" />
+                    <ToggleSwitch
+                        x:Name="EngineToggle"
+                        MinWidth="110"
+                        VerticalAlignment="Center"
+                        OffContent="Python"
+                        OnContent="Native"
+                        Toggled="EngineToggle_Toggled" />
                 </StackPanel>
             </CommandBar.Content>
             <AppBarButton x:Name="StartBridgeButton" Icon="Play" Label="Start Eye Tracking" Click="StartBridge_Click" />

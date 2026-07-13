@@ -1,0 +1,2434 @@
+{
+ "openness_curve": [
+  {
+   "input": [
+    0.0,
+    0.0
+   ],
+   "mode": "off",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "input": [
+    0.1,
+    0.9
+   ],
+   "mode": "off",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.10000000149011612,
+    0.8999999761581421
+   ]
+  },
+  {
+   "input": [
+    0.28,
+    0.5
+   ],
+   "mode": "off",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.2800000011920929,
+    0.5
+   ]
+  },
+  {
+   "input": [
+    0.5,
+    0.85
+   ],
+   "mode": "off",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.5,
+    0.8500000238418579
+   ]
+  },
+  {
+   "input": [
+    0.9,
+    0.95
+   ],
+   "mode": "off",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.8999999761581421,
+    0.949999988079071
+   ]
+  },
+  {
+   "input": [
+    1.0,
+    0.7
+   ],
+   "mode": "off",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    1.0,
+    0.699999988079071
+   ]
+  },
+  {
+   "input": [
+    0.3,
+    0.31
+   ],
+   "mode": "off",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.30000001192092896,
+    0.3100000023841858
+   ]
+  },
+  {
+   "input": [
+    0.0,
+    0.0
+   ],
+   "mode": "soft_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "input": [
+    0.1,
+    0.9
+   ],
+   "mode": "soft_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.05623413249850273,
+    1.0
+   ]
+  },
+  {
+   "input": [
+    0.28,
+    0.5
+   ],
+   "mode": "soft_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.20367960631847382,
+    0.4204482138156891
+   ]
+  },
+  {
+   "input": [
+    0.5,
+    0.85
+   ],
+   "mode": "soft_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.4204482138156891,
+    0.8161569237709045
+   ]
+  },
+  {
+   "input": [
+    0.9,
+    0.95
+   ],
+   "mode": "soft_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "input": [
+    1.0,
+    0.7
+   ],
+   "mode": "soft_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    1.0,
+    0.6402838230133057
+   ]
+  },
+  {
+   "input": [
+    0.3,
+    0.31
+   ],
+   "mode": "soft_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.2220248579978943,
+    0.23131410777568817
+   ]
+  },
+  {
+   "input": [
+    0.0,
+    0.0
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "input": [
+    0.1,
+    0.9
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "input": [
+    0.28,
+    0.5
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.0,
+    0.1703742891550064
+   ]
+  },
+  {
+   "input": [
+    0.5,
+    0.85
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.1703742891550064,
+    0.9942149519920349
+   ]
+  },
+  {
+   "input": [
+    0.9,
+    0.95
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "input": [
+    1.0,
+    0.7
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    1.0,
+    0.7634469866752625
+   ]
+  },
+  {
+   "input": [
+    0.3,
+    0.31
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    4.27391569246538e-05,
+    0.00018951903621200472
+   ]
+  },
+  {
+   "input": [
+    0.0,
+    0.0
+   ],
+   "mode": "full_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "input": [
+    0.1,
+    0.9
+   ],
+   "mode": "full_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.10000000149011612,
+    1.0
+   ]
+  },
+  {
+   "input": [
+    0.28,
+    0.5
+   ],
+   "mode": "full_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.2800000011920929,
+    0.47718381881713867
+   ]
+  },
+  {
+   "input": [
+    0.5,
+    0.85
+   ],
+   "mode": "full_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.47718381881713867,
+    0.928166389465332
+   ]
+  },
+  {
+   "input": [
+    0.9,
+    0.95
+   ],
+   "mode": "full_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "input": [
+    1.0,
+    0.7
+   ],
+   "mode": "full_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    1.0,
+    0.7224910259246826
+   ]
+  },
+  {
+   "input": [
+    0.3,
+    0.31
+   ],
+   "mode": "full_open_plateau",
+   "threshold": 0.9,
+   "knee": 0.28,
+   "gamma": 1.25,
+   "output": [
+    0.2898430824279785,
+    0.2963397204875946
+   ]
+  },
+  {
+   "input": [
+    0.4,
+    0.6
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.8,
+   "knee": 0.2,
+   "gamma": 1.5,
+   "output": [
+    0.09614921361207962,
+    0.7023320198059082
+   ]
+  },
+  {
+   "input": [
+    0.7,
+    0.2
+   ],
+   "mode": "blink_s_curve",
+   "threshold": 0.8,
+   "knee": 0.2,
+   "gamma": 1.5,
+   "output": [
+    0.9472346901893616,
+    0.0
+   ]
+  }
+ ],
+ "normalize_per_eye": [
+  {
+   "model": [
+    0.5,
+    0.8
+   ],
+   "open_p95": [
+    0.95,
+    0.9
+   ],
+   "closed_p05": [
+    0.1,
+    0.05
+   ],
+   "min_range": 0.05,
+   "output": [
+    0.4705882668495178,
+    0.8823530077934265
+   ]
+  },
+  {
+   "model": [
+    0.2,
+    1.0
+   ],
+   "open_p95": [
+    0.9,
+    0.92
+   ],
+   "closed_p05": [
+    0.2,
+    0.1
+   ],
+   "min_range": 0.05,
+   "output": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "model": [
+    0.5,
+    0.5
+   ],
+   "open_p95": [
+    0.52,
+    0.9
+   ],
+   "closed_p05": [
+    0.5,
+    0.05
+   ],
+   "min_range": 0.05,
+   "output": [
+    0.5,
+    0.529411792755127
+   ]
+  },
+  {
+   "model": [
+    0.0,
+    0.3
+   ],
+   "open_p95": [
+    1.0,
+    0.7
+   ],
+   "closed_p05": [
+    0.0,
+    0.6
+   ],
+   "min_range": 0.05,
+   "output": [
+    0.0,
+    0.0
+   ]
+  }
+ ],
+ "eye_shape_curve": [
+  {
+   "values": [
+    0.0,
+    0.5
+   ],
+   "scale": 0.6,
+   "gamma": 1.15,
+   "deadzone": 0.03,
+   "output": [
+    0.0,
+    0.2607812285423279
+   ]
+  },
+  {
+   "values": [
+    0.0,
+    0.5
+   ],
+   "scale": 0.55,
+   "gamma": 1.0,
+   "deadzone": 0.0,
+   "output": [
+    0.0,
+    0.2750000059604645
+   ]
+  },
+  {
+   "values": [
+    0.0,
+    0.5
+   ],
+   "scale": 1.0,
+   "gamma": 2.0,
+   "deadzone": 0.1,
+   "output": [
+    0.0,
+    0.19753089547157288
+   ]
+  },
+  {
+   "values": [
+    0.3,
+    0.9
+   ],
+   "scale": 0.6,
+   "gamma": 1.15,
+   "deadzone": 0.03,
+   "output": [
+    0.1378580629825592,
+    0.5294328927993774
+   ]
+  },
+  {
+   "values": [
+    0.3,
+    0.9
+   ],
+   "scale": 0.55,
+   "gamma": 1.0,
+   "deadzone": 0.0,
+   "output": [
+    0.16500000655651093,
+    0.4950000047683716
+   ]
+  },
+  {
+   "values": [
+    0.3,
+    0.9
+   ],
+   "scale": 1.0,
+   "gamma": 2.0,
+   "deadzone": 0.1,
+   "output": [
+    0.049382731318473816,
+    0.7901233434677124
+   ]
+  },
+  {
+   "values": [
+    0.6,
+    1.0
+   ],
+   "scale": 0.6,
+   "gamma": 1.15,
+   "deadzone": 0.03,
+   "output": [
+    0.3255516290664673,
+    0.6000000238418579
+   ]
+  },
+  {
+   "values": [
+    0.6,
+    1.0
+   ],
+   "scale": 0.55,
+   "gamma": 1.0,
+   "deadzone": 0.0,
+   "output": [
+    0.33000001311302185,
+    0.550000011920929
+   ]
+  },
+  {
+   "values": [
+    0.6,
+    1.0
+   ],
+   "scale": 1.0,
+   "gamma": 2.0,
+   "deadzone": 0.1,
+   "output": [
+    0.3086419999599457,
+    1.0
+   ]
+  },
+  {
+   "values": [
+    0.03,
+    0.05
+   ],
+   "scale": 0.6,
+   "gamma": 1.15,
+   "deadzone": 0.03,
+   "output": [
+    0.0,
+    0.0069111185148358345
+   ]
+  },
+  {
+   "values": [
+    0.03,
+    0.05
+   ],
+   "scale": 0.55,
+   "gamma": 1.0,
+   "deadzone": 0.0,
+   "output": [
+    0.016499999910593033,
+    0.027500001713633537
+   ]
+  },
+  {
+   "values": [
+    0.03,
+    0.05
+   ],
+   "scale": 1.0,
+   "gamma": 2.0,
+   "deadzone": 0.1,
+   "output": [
+    0.0,
+    0.0
+   ]
+  }
+ ],
+ "runtime_map": [
+  {
+   "value": [
+    0.0,
+    0.0
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    -0.02199999988079071,
+    0.008999999612569809
+   ]
+  },
+  {
+   "value": [
+    0.0,
+    0.0
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "soft",
+   "soft_knee": 0.72,
+   "output": [
+    -0.02199999988079071,
+    0.008999999612569809
+   ]
+  },
+  {
+   "value": [
+    0.0,
+    0.0
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 0.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    -0.02199999988079071,
+    0.008999999612569809
+   ]
+  },
+  {
+   "value": [
+    0.5,
+    -0.3
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    0.527999997138977,
+    -0.26100000739097595
+   ]
+  },
+  {
+   "value": [
+    0.5,
+    -0.3
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "soft",
+   "soft_knee": 0.72,
+   "output": [
+    0.527999997138977,
+    -0.26100000739097595
+   ]
+  },
+  {
+   "value": [
+    0.5,
+    -0.3
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 0.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    0.527999997138977,
+    -0.26100000739097595
+   ]
+  },
+  {
+   "value": [
+    1.2,
+    0.8
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    1.0,
+    0.7289999723434448
+   ]
+  },
+  {
+   "value": [
+    1.2,
+    0.8
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "soft",
+   "soft_knee": 0.72,
+   "output": [
+    0.9911236763000488,
+    0.7289968729019165
+   ]
+  },
+  {
+   "value": [
+    1.2,
+    0.8
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 0.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    1.2980000972747803,
+    0.7289999723434448
+   ]
+  },
+  {
+   "value": [
+    -0.9,
+    1.5
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    -1.0,
+    1.0
+   ]
+  },
+  {
+   "value": [
+    -0.9,
+    1.5
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 1.0,
+   "clamp_mode": "soft",
+   "soft_knee": 0.72,
+   "output": [
+    -0.938123881816864,
+    0.9942264556884766
+   ]
+  },
+  {
+   "value": [
+    -0.9,
+    1.5
+   ],
+   "offset": [
+    0.02,
+    -0.01
+   ],
+   "gain": [
+    1.1,
+    0.9
+   ],
+   "clamp": 0.0,
+   "clamp_mode": "hard",
+   "soft_knee": 0.72,
+   "output": [
+    -1.0119999647140503,
+    1.3589999675750732
+   ]
+  }
+ ],
+ "update_smooth": [
+  {
+   "alpha": 0.35,
+   "max_step": 0.0,
+   "steps": [
+    {
+     "current": [
+      0.0,
+      0.0
+     ],
+     "output": [
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "current": [
+      0.3,
+      0.1
+     ],
+     "output": [
+      0.10500000417232513,
+      0.03500000014901161
+     ]
+    },
+    {
+     "current": [
+      0.31,
+      0.12
+     ],
+     "output": [
+      0.17675000429153442,
+      0.06475000083446503
+     ]
+    },
+    {
+     "current": [
+      0.9,
+      -0.5
+     ],
+     "output": [
+      0.4298875033855438,
+      -0.1329125016927719
+     ]
+    },
+    {
+     "current": [
+      0.85,
+      -0.48
+     ],
+     "output": [
+      0.5769268870353699,
+      -0.2543931305408478
+     ]
+    },
+    {
+     "current": [
+      0.0,
+      0.0
+     ],
+     "output": [
+      0.3750024735927582,
+      -0.16535553336143494
+     ]
+    }
+   ]
+  },
+  {
+   "alpha": 0.35,
+   "max_step": 0.05,
+   "steps": [
+    {
+     "current": [
+      0.0,
+      0.0
+     ],
+     "output": [
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "current": [
+      0.3,
+      0.1
+     ],
+     "output": [
+      0.04743416607379913,
+      0.015811387449502945
+     ]
+    },
+    {
+     "current": [
+      0.31,
+      0.12
+     ],
+     "output": [
+      0.09390895068645477,
+      0.03425302356481552
+     ]
+    },
+    {
+     "current": [
+      0.9,
+      -0.5
+     ],
+     "output": [
+      0.13558626174926758,
+      0.006630541756749153
+     ]
+    },
+    {
+     "current": [
+      0.85,
+      -0.48
+     ],
+     "output": [
+      0.17691028118133545,
+      -0.02151774987578392
+     ]
+    },
+    {
+     "current": [
+      0.0,
+      0.0
+     ],
+     "output": [
+      0.12727607786655426,
+      -0.015480699017643929
+     ]
+    }
+   ]
+  }
+ ],
+ "output_gaze_mapper": [
+  {
+   "config": {
+    "mode": "off",
+    "deadzone": 0.015,
+    "gamma": 1.0,
+    "limit": 1.0
+   },
+   "steps": [
+    {
+     "value": [
+      0.0,
+      0.0
+     ],
+     "t": 0.0,
+     "conf": 1.0,
+     "open": 1.0,
+     "output": [
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "value": [
+      0.02,
+      0.01
+     ],
+     "t": 0.016,
+     "conf": 1.0,
+     "open": 1.0,
+     "output": [
+      0.005076142027974129,
+      0.0
+     ]
+    },
+    {
+     "value": [
+      0.5,
+      -0.3
+     ],
+     "t": 0.032,
+     "conf": 0.9,
+     "open": 0.9,
+     "output": [
+      0.4923858046531677,
+      -0.28934013843536377
+     ]
+    },
+    {
+     "value": [
+      0.03,
+      0.02
+     ],
+     "t": 0.048,
+     "conf": 0.9,
+     "open": 0.9,
+     "output": [
+      0.015228426083922386,
+      0.005076142027974129
+     ]
+    },
+    {
+     "value": [
+      -0.7,
+      0.6
+     ],
+     "t": 0.064,
+     "conf": 0.2,
+     "open": 0.3,
+     "output": [
+      -0.6954314708709717,
+      0.5939086675643921
+     ]
+    }
+   ]
+  },
+  {
+   "config": {
+    "mode": "stable_center",
+    "deadzone": 0.015,
+    "gamma": 1.0,
+    "limit": 1.0,
+    "center_radius": 0.08,
+    "center_tau": 6.0,
+    "center_max_step": 0.025
+   },
+   "steps": [
+    {
+     "value": [
+      0.0,
+      0.0
+     ],
+     "t": 0.0,
+     "conf": 1.0,
+     "open": 1.0,
+     "output": [
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "value": [
+      0.02,
+      0.01
+     ],
+     "t": 0.016,
+     "conf": 1.0,
+     "open": 1.0,
+     "output": [
+      0.005022068507969379,
+      0.0
+     ]
+    },
+    {
+     "value": [
+      0.5,
+      -0.3
+     ],
+     "t": 0.032,
+     "conf": 0.9,
+     "open": 0.9,
+     "output": [
+      0.49233171343803406,
+      -0.2893671691417694
+     ]
+    },
+    {
+     "value": [
+      0.03,
+      0.02
+     ],
+     "t": 0.048,
+     "conf": 0.9,
+     "open": 0.9,
+     "output": [
+      0.015174352563917637,
+      0.005049106199294329
+     ]
+    },
+    {
+     "value": [
+      -0.7,
+      0.6
+     ],
+     "t": 0.064,
+     "conf": 0.2,
+     "open": 0.3,
+     "output": [
+      -0.6954855918884277,
+      0.5938816070556641
+     ]
+    }
+   ]
+  }
+ ],
+ "pupil_wide": [
+  {
+   "enter": 0.9,
+   "exit": 0.86,
+   "hold_frames": 8,
+   "ema": 0.45,
+   "steps": [
+    {
+     "raw": [
+      0.0,
+      0.0
+     ],
+     "output": [
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "raw": [
+      0.95,
+      0.5
+     ],
+     "output": [
+      0.22499993443489075,
+      0.0
+     ]
+    },
+    {
+     "raw": [
+      0.88,
+      0.92
+     ],
+     "output": [
+      0.22499993443489075,
+      0.09000007063150406
+     ]
+    },
+    {
+     "raw": [
+      0.87,
+      0.1
+     ],
+     "output": [
+      0.22499993443489075,
+      0.09000007063150406
+     ]
+    },
+    {
+     "raw": [
+      0.5,
+      0.05
+     ],
+     "output": [
+      0.22499993443489075,
+      0.09000007063150406
+     ]
+    },
+    {
+     "raw": [
+      0.0,
+      0.0
+     ],
+     "output": [
+      0.22499993443489075,
+      0.09000007063150406
+     ]
+    },
+    {
+     "raw": [
+      0.0,
+      0.0
+     ],
+     "output": [
+      0.22499993443489075,
+      0.09000007063150406
+     ]
+    }
+   ]
+  }
+ ],
+ "pupil_output": [
+  {
+   "mode_raw": "off",
+   "mode": "off",
+   "openness": 1.0,
+   "wide": 0.0,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil-output-off"
+   }
+  },
+  {
+   "mode_raw": "off",
+   "mode": "off",
+   "openness": 1.0,
+   "wide": 0.8,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil-output-off"
+   }
+  },
+  {
+   "mode_raw": "off",
+   "mode": "off",
+   "openness": 0.3,
+   "wide": 0.5,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil-output-off"
+   }
+  },
+  {
+   "mode_raw": "off",
+   "mode": "off",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.01,
+   "confidence": 0.9,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil-output-off"
+   }
+  },
+  {
+   "mode_raw": "off",
+   "mode": "off",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.2,
+   "confidence": 0.02,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil-output-off"
+   }
+  },
+  {
+   "mode_raw": "assist",
+   "mode": "expression_constrict_on_wide",
+   "openness": 1.0,
+   "wide": 0.0,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "expression-constrict-on-wide"
+   }
+  },
+  {
+   "mode_raw": "assist",
+   "mode": "expression_constrict_on_wide",
+   "openness": 1.0,
+   "wide": 0.8,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.26,
+    "expressionNormalized": 0.26,
+    "reason": "expression-constrict-on-wide"
+   }
+  },
+  {
+   "mode_raw": "assist",
+   "mode": "expression_constrict_on_wide",
+   "openness": 0.3,
+   "wide": 0.5,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  },
+  {
+   "mode_raw": "assist",
+   "mode": "expression_constrict_on_wide",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.01,
+   "confidence": 0.9,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.44,
+    "expressionNormalized": 0.44,
+    "reason": "expression-constrict-on-wide"
+   }
+  },
+  {
+   "mode_raw": "assist",
+   "mode": "expression_constrict_on_wide",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.2,
+   "confidence": 0.02,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  },
+  {
+   "mode_raw": "expression_constrict_on_wide",
+   "mode": "expression_constrict_on_wide",
+   "openness": 1.0,
+   "wide": 0.0,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "expression-constrict-on-wide"
+   }
+  },
+  {
+   "mode_raw": "expression_constrict_on_wide",
+   "mode": "expression_constrict_on_wide",
+   "openness": 1.0,
+   "wide": 0.8,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.26,
+    "expressionNormalized": 0.26,
+    "reason": "expression-constrict-on-wide"
+   }
+  },
+  {
+   "mode_raw": "expression_constrict_on_wide",
+   "mode": "expression_constrict_on_wide",
+   "openness": 0.3,
+   "wide": 0.5,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  },
+  {
+   "mode_raw": "expression_constrict_on_wide",
+   "mode": "expression_constrict_on_wide",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.01,
+   "confidence": 0.9,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.44,
+    "expressionNormalized": 0.44,
+    "reason": "expression-constrict-on-wide"
+   }
+  },
+  {
+   "mode_raw": "expression_constrict_on_wide",
+   "mode": "expression_constrict_on_wide",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.2,
+   "confidence": 0.02,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  },
+  {
+   "mode_raw": "diameter",
+   "mode": "model_radius",
+   "openness": 1.0,
+   "wide": 0.0,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.1,
+    "expressionNormalized": 0.5,
+    "reason": "model-radius-debug"
+   }
+  },
+  {
+   "mode_raw": "diameter",
+   "mode": "model_radius",
+   "openness": 1.0,
+   "wide": 0.8,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.1,
+    "expressionNormalized": 0.5,
+    "reason": "model-radius-debug"
+   }
+  },
+  {
+   "mode_raw": "diameter",
+   "mode": "model_radius",
+   "openness": 0.3,
+   "wide": 0.5,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  },
+  {
+   "mode_raw": "diameter",
+   "mode": "model_radius",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.01,
+   "confidence": 0.9,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "model pupil radius gated"
+   }
+  },
+  {
+   "mode_raw": "diameter",
+   "mode": "model_radius",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.2,
+   "confidence": 0.02,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  },
+  {
+   "mode_raw": "model_radius",
+   "mode": "model_radius",
+   "openness": 1.0,
+   "wide": 0.0,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.1,
+    "expressionNormalized": 0.5,
+    "reason": "model-radius-debug"
+   }
+  },
+  {
+   "mode_raw": "model_radius",
+   "mode": "model_radius",
+   "openness": 1.0,
+   "wide": 0.8,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": true,
+    "quality": true,
+    "normalized": 0.1,
+    "expressionNormalized": 0.5,
+    "reason": "model-radius-debug"
+   }
+  },
+  {
+   "mode_raw": "model_radius",
+   "mode": "model_radius",
+   "openness": 0.3,
+   "wide": 0.5,
+   "radius": 0.1,
+   "confidence": 1.0,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  },
+  {
+   "mode_raw": "model_radius",
+   "mode": "model_radius",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.01,
+   "confidence": 0.9,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "model pupil radius gated"
+   }
+  },
+  {
+   "mode_raw": "model_radius",
+   "mode": "model_radius",
+   "openness": 0.9,
+   "wide": 0.2,
+   "radius": 0.2,
+   "confidence": 0.02,
+   "output": {
+    "found": false,
+    "quality": false,
+    "normalized": 0.5,
+    "expressionNormalized": 0.5,
+    "reason": "pupil output gated by confidence or closed eyelid"
+   }
+  }
+ ],
+ "tracking": [
+  {
+   "openness_machine": true,
+   "gaze_hold": true,
+   "ema": 0.35,
+   "steps": [
+    {
+     "curved": [
+      1.0,
+      1.0
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      1.0,
+      1.0
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      1.0,
+      1.0
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.005,
+      0.0
+     ],
+     "out_openness": [
+      1.0,
+      1.0
+     ],
+     "out_gaze": [
+      0.004999999888241291,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.98,
+      0.99
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.01,
+      0.005
+     ],
+     "out_openness": [
+      0.9890000224113464,
+      0.9944999814033508
+     ],
+     "out_gaze": [
+      0.009999999776482582,
+      0.004999999888241291
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.97,
+      0.98
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.4,
+      -0.2
+     ],
+     "out_openness": [
+      0.9785500168800354,
+      0.9865249991416931
+     ],
+     "out_gaze": [
+      0.4000000059604645,
+      -0.20000000298023224
+     ],
+     "state": "SACCADE",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.6,
+      0.1
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.41,
+      -0.21
+     ],
+     "out_openness": [
+      0.770347535610199,
+      0.9865249991416931
+     ],
+     "out_gaze": [
+      0.4099999964237213,
+      -0.20999999344348907
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "PARTIAL",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.15,
+      0.12
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.42,
+      -0.22
+     ],
+     "out_openness": [
+      0.21203476190567017,
+      0.20665249228477478
+     ],
+     "out_gaze": [
+      0.4099999964237213,
+      -0.20999999344348907
+     ],
+     "state": "BLINKING",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.1,
+      0.9
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.4,
+      -0.2
+     ],
+     "out_openness": [
+      0.15041564404964447,
+      0.7266631126403809
+     ],
+     "out_gaze": [
+      0.4099999964237213,
+      -0.20999999344348907
+     ],
+     "state": "ONE_EYE_LOST",
+     "left_sub": "CLOSED",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.5,
+      0.95
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.3,
+      -0.1
+     ],
+     "out_openness": [
+      0.4126039147377014,
+      0.8941657543182373
+     ],
+     "out_gaze": [
+      0.4099999964237213,
+      -0.20999999344348907
+     ],
+     "state": "REOPENING",
+     "left_sub": "PARTIAL",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.95,
+      0.98
+     ],
+     "pair_conf": 0.03,
+     "gaze": [
+      0.1,
+      0.0
+     ],
+     "out_openness": [
+      0.8156509399414062,
+      0.9585414528846741
+     ],
+     "out_gaze": [
+      0.30149999260902405,
+      -0.13650000095367432
+     ],
+     "state": "REACQUIRE",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.99,
+      0.99
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.1,
+      0.0
+     ],
+     "out_openness": [
+      0.9464127421379089,
+      0.9821353554725647
+     ],
+     "out_gaze": [
+      0.23097500205039978,
+      -0.0887250006198883
+     ],
+     "state": "SACCADE",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    }
+   ]
+  },
+  {
+   "openness_machine": false,
+   "gaze_hold": false,
+   "ema": 0.35,
+   "steps": [
+    {
+     "curved": [
+      1.0,
+      1.0
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      1.0,
+      1.0
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      1.0,
+      1.0
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.005,
+      0.0
+     ],
+     "out_openness": [
+      1.0,
+      1.0
+     ],
+     "out_gaze": [
+      0.004999999888241291,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.98,
+      0.99
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.01,
+      0.005
+     ],
+     "out_openness": [
+      0.9800000190734863,
+      0.9900000095367432
+     ],
+     "out_gaze": [
+      0.009999999776482582,
+      0.004999999888241291
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.97,
+      0.98
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.4,
+      -0.2
+     ],
+     "out_openness": [
+      0.9700000286102295,
+      0.9800000190734863
+     ],
+     "out_gaze": [
+      0.4000000059604645,
+      -0.20000000298023224
+     ],
+     "state": "SACCADE",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.6,
+      0.1
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.41,
+      -0.21
+     ],
+     "out_openness": [
+      0.6000000238418579,
+      0.10000000149011612
+     ],
+     "out_gaze": [
+      0.4099999964237213,
+      -0.20999999344348907
+     ],
+     "state": "ONE_EYE_LOST",
+     "left_sub": "PARTIAL",
+     "right_sub": "CLOSED"
+    },
+    {
+     "curved": [
+      0.15,
+      0.12
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.42,
+      -0.22
+     ],
+     "out_openness": [
+      0.15000000596046448,
+      0.11999999731779099
+     ],
+     "out_gaze": [
+      0.41999998688697815,
+      -0.2199999988079071
+     ],
+     "state": "CLOSED",
+     "left_sub": "CLOSED",
+     "right_sub": "CLOSED"
+    },
+    {
+     "curved": [
+      0.1,
+      0.9
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.4,
+      -0.2
+     ],
+     "out_openness": [
+      0.10000000149011612,
+      0.8999999761581421
+     ],
+     "out_gaze": [
+      0.4000000059604645,
+      -0.20000000298023224
+     ],
+     "state": "ONE_EYE_LOST",
+     "left_sub": "CLOSED",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.5,
+      0.95
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.3,
+      -0.1
+     ],
+     "out_openness": [
+      0.5,
+      0.949999988079071
+     ],
+     "out_gaze": [
+      0.30000001192092896,
+      -0.10000000149011612
+     ],
+     "state": "SACCADE",
+     "left_sub": "PARTIAL",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.95,
+      0.98
+     ],
+     "pair_conf": 0.03,
+     "gaze": [
+      0.1,
+      0.0
+     ],
+     "out_openness": [
+      0.949999988079071,
+      0.9800000190734863
+     ],
+     "out_gaze": [
+      0.10000000149011612,
+      0.0
+     ],
+     "state": "REACQUIRE",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.99,
+      0.99
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.1,
+      0.0
+     ],
+     "out_openness": [
+      0.9900000095367432,
+      0.9900000095367432
+     ],
+     "out_gaze": [
+      0.10000000149011612,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    }
+   ]
+  },
+  {
+   "openness_machine": true,
+   "gaze_hold": true,
+   "ema": 0.35,
+   "close_confirm_frames": 3,
+   "close_confirm_floor": 0.22,
+   "partial_deadband": 0.04,
+   "steps": [
+    {
+     "curved": [
+      1.0,
+      1.0
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      1.0,
+      1.0
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.4,
+      0.5
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.02
+     ],
+     "out_openness": [
+      0.6700000166893005,
+      0.7250000238418579
+     ],
+     "out_gaze": [
+      0.0,
+      0.019999999552965164
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.1,
+      0.15
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      -0.02
+     ],
+     "out_openness": [
+      0.42250001430511475,
+      0.44725000858306885
+     ],
+     "out_gaze": [
+      0.0,
+      0.019999999552965164
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.05,
+      0.1
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.03
+     ],
+     "out_openness": [
+      0.3111250102519989,
+      0.3222624957561493
+     ],
+     "out_gaze": [
+      0.0,
+      0.019999999552965164
+     ],
+     "state": "REOPENING",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.8,
+      0.9
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.6777812838554382,
+      0.7555655837059021
+     ],
+     "out_gaze": [
+      0.0,
+      0.013000000268220901
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      1.0,
+      1.0
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.9194453358650208,
+      0.9388914108276367
+     ],
+     "out_gaze": [
+      0.0,
+      0.008449999615550041
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "OPEN",
+     "right_sub": "OPEN"
+    },
+    {
+     "curved": [
+      0.5,
+      0.5
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.6887503862380981,
+      0.6975011229515076
+     ],
+     "out_gaze": [
+      0.0,
+      0.008449999615550041
+     ],
+     "state": "REOPENING",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.52,
+      0.48
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.5959376692771912,
+      0.5778754949569702
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.49,
+      0.53
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.5376719832420349,
+      0.5515439510345459
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.15,
+      0.12
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.3629523813724518,
+      0.36919477581977844
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "TRACKING_OK",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.05,
+      0.05
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.2843285799026489,
+      0.2871376574039459
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "REOPENING",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    },
+    {
+     "curved": [
+      0.02,
+      0.02
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.04643285647034645,
+      0.04671376571059227
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "CLOSED",
+     "left_sub": "CLOSED",
+     "right_sub": "CLOSED"
+    },
+    {
+     "curved": [
+      0.02,
+      0.02
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.022643284872174263,
+      0.022671375423669815
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "CLOSED",
+     "left_sub": "CLOSED",
+     "right_sub": "CLOSED"
+    },
+    {
+     "curved": [
+      0.9,
+      0.95
+     ],
+     "pair_conf": 0.9,
+     "gaze": [
+      0.0,
+      0.0
+     ],
+     "out_openness": [
+      0.6806607842445374,
+      0.7181678414344788
+     ],
+     "out_gaze": [
+      0.0,
+      0.0
+     ],
+     "state": "REOPENING",
+     "left_sub": "PARTIAL",
+     "right_sub": "PARTIAL"
+    }
+   ]
+  }
+ ]
+}

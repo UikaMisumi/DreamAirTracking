@@ -48,6 +48,24 @@ def load_image_size(metadata_path: Path | None, fallback: int) -> int:
     return int(payload.get("image_size", fallback))
 
 
+def make_session_options(threads: int) -> ort.SessionOptions:
+    """Low-CPU ONNX session options: cap intra-op threads and disable thread spinning.
+
+    For this tiny MobileNetV3 (2x128x128), onnxruntime's default all-core intra-op is
+    both SLOWER and far more CPU-hungry than 1-2 threads (thread setup/sync + busy-wait
+    spinning dominate). Capping threads + disabling spinning cuts CPU% a lot at no
+    latency cost.
+    """
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = max(1, int(threads))
+    options.inter_op_num_threads = 1
+    try:
+        options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    except Exception:
+        pass
+    return options
+
+
 def run_onnx(
     session: ort.InferenceSession,
     left: JpegFrame,
@@ -376,6 +394,16 @@ class TrackingStateParams:
     rise_alpha: float = 0.75
     fall_alpha: float = 0.55
     both_closed_fall_alpha: float = 0.90
+    # P0-3 closure confirmation + half-open stability (defaults OFF = legacy byte-identical)
+    # A closure only "confirms" after this many consecutive frames at/below closed_threshold;
+    # until confirmed the output is floored at close_confirm_floor and the fast both-closed
+    # fall alpha is not applied. Kills transient dips from headset shake (1-3 frame dips never
+    # confirm) while a real blink stays below threshold and confirms ~25ms later at 120fps.
+    close_confirm_frames: int = 0
+    close_confirm_floor: float = 0.22
+    # Within the half-open band (closed_threshold..open_hold_threshold) ignore target changes
+    # smaller than this so a half-closed lid reads steady instead of flickering.
+    partial_deadband: float = 0.0
     # binocular closure gaze hold (BridgeClosureGazeStabilizerOptions)
     closing_openness_threshold: float = 0.50
     closed_openness_threshold: float = 0.20
@@ -415,6 +443,7 @@ class TrackingStateMachine:
         self._open_initialized = False
         self._left_hold = 0
         self._right_hold = 0
+        self._close_count = [0, 0]  # P0-3 consecutive frames at/below closed_threshold per eye
         self._prev_gaze = None
         self._prev_avg_open = 1.0
         self._gaze_hold_frames = 0
@@ -462,9 +491,18 @@ class TrackingStateMachine:
             self._open_initialized = True
             self._open_state = raw.copy()
             return self._open_state
-        both_closed = bool(raw[0] <= p.closed_threshold and raw[1] <= p.closed_threshold)
+        below = [bool(raw[0] <= p.closed_threshold), bool(raw[1] <= p.closed_threshold)]
+        # P0-3: a closure only counts once it persists close_confirm_frames consecutive frames.
+        if p.close_confirm_frames > 0:
+            for i in range(2):
+                self._close_count[i] = self._close_count[i] + 1 if below[i] else 0
+            confirmed = [self._close_count[i] >= p.close_confirm_frames for i in range(2)]
+        else:
+            confirmed = below  # legacy: below == instantly confirmed
+        both_closed_raw = bool(below[0] and below[1])
+        both_closed = bool(confirmed[0] and confirmed[1])  # gates the fast both-closed fall alpha
         target = raw.copy()
-        if not both_closed:
+        if not both_closed_raw:
             target[0], self._left_hold = self._hold_asymmetric_drop(
                 float(raw[0]), float(raw[1]), float(self._open_state[0]), self._left_hold
             )
@@ -474,6 +512,22 @@ class TrackingStateMachine:
         else:
             self._left_hold = 0
             self._right_hold = 0
+        if p.close_confirm_frames > 0:
+            # unconfirmed closures cannot read fully closed (transient dip suppression)
+            for i in range(2):
+                if below[i] and not confirmed[i]:
+                    target[i] = max(float(target[i]), p.close_confirm_floor)
+        if p.partial_deadband > 0.0:
+            # half-open band deadband: hold steady against sub-threshold flicker
+            for i in range(2):
+                prev = float(self._open_state[i])
+                t = float(target[i])
+                if (
+                    p.closed_threshold < prev < p.open_hold_threshold
+                    and p.closed_threshold < t < p.open_hold_threshold
+                    and abs(t - prev) <= p.partial_deadband
+                ):
+                    target[i] = prev
         self._open_state[0] = self._smooth(float(self._open_state[0]), float(target[0]), both_closed)
         self._open_state[1] = self._smooth(float(self._open_state[1]), float(target[1]), both_closed)
         return self._open_state
@@ -587,6 +641,9 @@ def build_tracking_params(args) -> TrackingStateParams:
         rise_alpha=args.tracking_openness_rise_alpha,
         fall_alpha=args.tracking_openness_fall_alpha,
         both_closed_fall_alpha=args.tracking_openness_both_closed_fall_alpha,
+        close_confirm_frames=args.tracking_close_confirm_frames,
+        close_confirm_floor=args.tracking_close_confirm_floor,
+        partial_deadband=args.tracking_partial_deadband,
         closing_openness_threshold=args.tracking_gaze_closing_openness_threshold,
         closed_openness_threshold=args.tracking_gaze_closed_openness_threshold,
         reopen_openness_threshold=args.tracking_gaze_reopen_openness_threshold,
@@ -701,6 +758,13 @@ def main() -> int:
     parser.add_argument("--expression-every-n-frames", type=int, default=1, help="Run secondary expression ONNX every N emitted frames and hold between updates.")
     parser.add_argument("--expression-ema-alpha", type=float, default=1.0, help="EMA alpha for secondary wide/squint outputs; 1 disables smoothing.")
     parser.add_argument("--image-size", type=int, default=128)
+    parser.add_argument(
+        "--onnx-threads",
+        type=int,
+        default=2,
+        help="ONNX intra-op threads (default 2). onnxruntime's default = all cores, which is "
+        "slower AND far more CPU-hungry for this tiny model.",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5555)
     parser.add_argument("--output-dir", type=Path, default=Path("runs/live_multitask_dry_run"))
@@ -765,6 +829,9 @@ def main() -> int:
     parser.add_argument("--tracking-openness-rise-alpha", type=float, default=0.75)
     parser.add_argument("--tracking-openness-fall-alpha", type=float, default=0.55)
     parser.add_argument("--tracking-openness-both-closed-fall-alpha", type=float, default=0.90)
+    parser.add_argument("--tracking-close-confirm-frames", type=int, default=0)
+    parser.add_argument("--tracking-close-confirm-floor", type=float, default=0.22)
+    parser.add_argument("--tracking-partial-deadband", type=float, default=0.0)
     parser.add_argument("--tracking-open-evidence-threshold", type=float, default=0.90)
     parser.add_argument("--tracking-open-evidence-floor", type=float, default=0.75)
     parser.add_argument("--tracking-open-hold-threshold", type=float, default=0.80)
@@ -797,7 +864,7 @@ def main() -> int:
     args = parser.parse_args()
 
     image_size = load_image_size(args.metadata.resolve() if args.metadata else None, args.image_size)
-    session = ort.InferenceSession(str(args.onnx.resolve()), providers=["CPUExecutionProvider"])
+    session = ort.InferenceSession(str(args.onnx.resolve()), sess_options=make_session_options(args.onnx_threads), providers=["CPUExecutionProvider"])
     expression_session = None
     expression_image_size = image_size
     expression_every_n = max(1, args.expression_every_n_frames)
@@ -807,7 +874,7 @@ def main() -> int:
             args.expression_metadata.resolve() if args.expression_metadata else None,
             image_size,
         )
-        expression_session = ort.InferenceSession(str(args.expression_onnx.resolve()), providers=["CPUExecutionProvider"])
+        expression_session = ort.InferenceSession(str(args.expression_onnx.resolve()), sess_options=make_session_options(args.onnx_threads), providers=["CPUExecutionProvider"])
         expression_outputs = {item.name for item in expression_session.get_outputs()}
         if not {"wide_lr", "squint_lr"}.issubset(expression_outputs):
             raise SystemExit(f"Expression ONNX outputs {sorted(expression_outputs)}; expected wide_lr and squint_lr.")

@@ -24,4 +24,8 @@
     <ProjectReference Include="..\..\src\DreamAirTracking.Core\DreamAirTracking.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Runtime\fixtures\postprocess_parity.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

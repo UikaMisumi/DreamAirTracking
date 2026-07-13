@@ -188,20 +188,34 @@ def read_manifest(path: Path) -> list[Sample]:
     return samples
 
 
-def augment_image(image: Image.Image, rng: random.Random) -> Image.Image:
+def augment_image(image: Image.Image, rng: random.Random,
+                  ty_frac: float = 0.10, tx_frac: float = 0.12, shadow: bool = False,
+                  motion_blur: bool = False) -> Image.Image:
+    if motion_blur and rng.random() < 0.25:
+        # P0-1b: vertical motion blur — headset shake smears the eyelid vertically; without this
+        # a blurred lid reads as half-closed. Box blur along y via padded cumsum (fast, exact).
+        arr = np.asarray(image).astype(np.float32)
+        k = rng.randint(3, 9)
+        pad = np.pad(arr, ((k // 2, k - 1 - k // 2), (0, 0)), mode="edge")
+        csum = np.cumsum(np.vstack([np.zeros((1, arr.shape[1]), dtype=np.float32), pad]), axis=0)
+        blurred = (csum[k:] - csum[:-k]) / float(k)
+        image = Image.fromarray(np.clip(blurred, 0.0, 255.0).astype(np.uint8))
     if rng.random() < 0.80:
         image = ImageEnhance.Brightness(image).enhance(rng.uniform(0.65, 1.35))
     if rng.random() < 0.80:
         image = ImageEnhance.Contrast(image).enhance(rng.uniform(0.75, 1.25))
     if rng.random() < 0.12:
         image = image.filter(ImageFilter.GaussianBlur(radius=rng.uniform(0.0, 0.9)))
-    if rng.random() < 0.75:
+    if rng.random() < 0.85:
         width, height = image.size
         scale = rng.uniform(0.88, 1.15)
-        tx = rng.uniform(-0.12, 0.12) * width
-        ty = rng.uniform(-0.10, 0.10) * height
+        # P0-1: vertical-translation range is row-type aware (eyelid aggressive / open gaze medium /
+        # gaze moderate) so the openness head learns invariance to headset slide.
+        tx = rng.uniform(-tx_frac, tx_frac) * width
+        ty = rng.uniform(-ty_frac, ty_frac) * height
         cx = width * 0.5
         cy = height * 0.5
+        fill = int(float(np.asarray(image).mean()))  # skin-ish fill so exposed edge isn't a black "closed" bar
         image = image.transform(
             image.size,
             Image.Transform.AFFINE,
@@ -214,15 +228,27 @@ def augment_image(image: Image.Image, rng: random.Random) -> Image.Image:
                 cy - (cy + ty) / scale,
             ),
             resample=Image.Resampling.BILINEAR,
-            fillcolor=0,
+            fillcolor=fill,
         )
+    if shadow and rng.random() < 0.35:
+        # simulate a lens-rim / eyelid shadow band intruding from top or bottom on a fit shift
+        arr = np.asarray(image).astype(np.float32)
+        band_h = int(rng.uniform(0.12, 0.30) * arr.shape[0])
+        factor = rng.uniform(0.3, 0.7)
+        if rng.random() < 0.5:
+            arr[:band_h] *= factor
+        else:
+            arr[arr.shape[0] - band_h:] *= factor
+        image = Image.fromarray(np.clip(arr, 0.0, 255.0).astype(np.uint8))
     return image
 
 
-def image_to_tensor(path: Path, size: int, train: bool, rng: random.Random) -> torch.Tensor:
+def image_to_tensor(path: Path, size: int, train: bool, rng: random.Random,
+                    ty_frac: float = 0.10, tx_frac: float = 0.12, shadow: bool = False,
+                    motion_blur: bool = False) -> torch.Tensor:
     image = Image.open(path).convert("L").resize((size, size), Image.Resampling.BILINEAR)
     if train:
-        image = augment_image(image, rng)
+        image = augment_image(image, rng, ty_frac, tx_frac, shadow, motion_blur)
     array = np.asarray(image, dtype=np.float32) / 255.0
     if train and rng.random() < 0.45:
         array = np.clip(array + np.random.normal(0.0, 0.018, array.shape), 0.0, 1.0)
@@ -230,12 +256,14 @@ def image_to_tensor(path: Path, size: int, train: bool, rng: random.Random) -> t
 
 
 class EyeMultitaskDataset(Dataset):
-    def __init__(self, samples: list[Sample], image_size: int, train: bool, seed: int, min_weak_quality: float) -> None:
+    def __init__(self, samples: list[Sample], image_size: int, train: bool, seed: int, min_weak_quality: float,
+                 gaze_openness_open_label: bool = False) -> None:
         self.samples = samples
         self.image_size = image_size
         self.train = train
         self.seed = seed
         self.min_weak_quality = min_weak_quality
+        self.gaze_openness_open_label = gaze_openness_open_label
         self.center_anchors = build_session_center_anchors(samples, min_weak_quality)
 
     def __len__(self) -> int:
@@ -244,14 +272,28 @@ class EyeMultitaskDataset(Dataset):
     def __getitem__(self, index: int) -> dict[str, torch.Tensor | str]:
         sample = self.samples[index]
         rng = random.Random(self.seed + index * 1009)
-        left = image_to_tensor(sample.left_file, self.image_size, self.train, rng)
-        right = image_to_tensor(sample.right_file, self.image_size, self.train, rng)
+        is_gaze = sample.weight > 0.0
+        # P0-1/P1-7/P0-1b: row-type-aware vertical-translation + shake-blur for openness slide/shake-robustness
+        if not is_gaze:
+            ty_frac, tx_frac, shadow, mblur = 0.32, 0.15, True, True   # eyelid/expression: aggressive
+        elif self.gaze_openness_open_label:
+            ty_frac, tx_frac, shadow, mblur = 0.20, 0.13, True, True   # open gaze frames (now openness-supervised): medium
+        else:
+            ty_frac, tx_frac, shadow, mblur = 0.10, 0.12, False, False  # gaze without open-label: moderate (protect gaze)
+        left = image_to_tensor(sample.left_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur)
+        right = image_to_tensor(sample.right_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur)
         left_quality, right_quality, pair_quality = sample.confidence
         weak_pair = 1.0 if sample.has_weak and pair_quality >= self.min_weak_quality else 0.0
         left_pupil = 1.0 if sample.has_weak and left_quality >= self.min_weak_quality else 0.0
         right_pupil = 1.0 if sample.has_weak and right_quality >= self.min_weak_quality else 0.0
         old_expression_mask = sample.expression_mask if sample.has_weak else 0.0
         openness_mask = sample.openness_mask if sample.openness_mask[0] >= 0.0 else (weak_pair, weak_pair)
+        openness = sample.openness
+        if self.gaze_openness_open_label and is_gaze:
+            # P1-7: open-eye gaze frames get a hard open=1 label (protocol-known open), supervised at many
+            # positions; a constant label means the openness head can't read gaze -> stays de-entangled.
+            openness = (1.0, 1.0)
+            openness_mask = (1.0, 1.0)
         wide_mask = sample.wide_mask if sample.wide_mask[0] >= 0.0 else (old_expression_mask, old_expression_mask)
         squint_mask = sample.squint_mask if sample.squint_mask[0] >= 0.0 else (old_expression_mask, old_expression_mask)
         pupil_side_mask = sample.pupil_mask if sample.pupil_mask[0] >= 0.0 else (left_pupil, right_pupil)
@@ -264,7 +306,7 @@ class EyeMultitaskDataset(Dataset):
             "image": torch.cat([left, right], dim=0),
             "metadata": torch.tensor(metadata_features(sample, self.center_anchors, self.min_weak_quality), dtype=torch.float32),
             "gaze": torch.tensor(sample.gaze, dtype=torch.float32),
-            "openness": torch.tensor(sample.openness, dtype=torch.float32),
+            "openness": torch.tensor(openness, dtype=torch.float32),
             "wide": torch.tensor(sample.wide, dtype=torch.float32),
             "squint": torch.tensor(sample.squint, dtype=torch.float32),
             "pupil": torch.tensor(sample.pupil, dtype=torch.float32),
@@ -821,7 +863,7 @@ def train(args: argparse.Namespace) -> dict[str, object]:
         raise SystemExit("Manifest must contain both train and val samples.")
 
     train_loader = DataLoader(
-        EyeMultitaskDataset(train_samples, args.image_size, train=True, seed=args.seed, min_weak_quality=args.min_weak_quality),
+        EyeMultitaskDataset(train_samples, args.image_size, train=True, seed=args.seed, min_weak_quality=args.min_weak_quality, gaze_openness_open_label=args.gaze_openness_open_label),
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
@@ -1026,6 +1068,9 @@ def main() -> int:
         help="Bypass the head-mask training gate entirely (not recommended).",
     )
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--gaze-openness-open-label", action="store_true",
+                        help="P1-7: supervise openness=1.0 (hard, protocol-known open) on open-eye gaze rows so the "
+                             "openness head sees open eyes at many positions; constant label keeps gaze de-entangled.")
     parser.add_argument("--architecture", choices=("two_channel", "siamese", "siamese_metadata", "split_siamese"), default="two_channel")
     parser.add_argument(
         "--pretrained-backbone",

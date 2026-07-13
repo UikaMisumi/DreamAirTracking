@@ -232,7 +232,7 @@ public sealed partial class CalibrationPage : Page
     {
         StartOpennessProcess(
             outputSubdirectory: IOPath.Combine("runs", "fullparam_capture", $"eyelid_app_{DateTime.Now:yyyyMMdd_HHmmss}"),
-            extraArguments: "--preset training --settle-seconds 0.8 --stage-seconds 2.0 --save-training-images --validation-every 999 --beep",
+            extraArguments: "--preset training --settle-seconds 0.8 --stage-seconds 2.0 --save-training-images --validation-every 999 --beep --model-openness",
             title: "Eyelid calibration",
             message: "Follow the prompts. The result becomes the current eyelid calibration and exports a training package automatically.");
         return Task.CompletedTask;
@@ -317,7 +317,7 @@ public sealed partial class CalibrationPage : Page
     {
         StartOpennessProcess(
             outputSubdirectory: IOPath.Combine("runs", "live_openness_calibration_app"),
-            extraArguments: "--settle-seconds 1.5 --stage-seconds 4 --beep",
+            extraArguments: "--settle-seconds 1.5 --stage-seconds 4 --beep --model-openness",
             title: "Eyelid calibration",
             message: "A terminal was opened. Follow the beep prompts, then use latest eyelid calibration.");
     }
@@ -326,7 +326,7 @@ public sealed partial class CalibrationPage : Page
     {
         StartOpennessProcess(
             outputSubdirectory: IOPath.Combine("runs", "fullparam_capture", $"eyelid_app_{DateTime.Now:yyyyMMdd_HHmmss}"),
-            extraArguments: "--preset training --settle-seconds 0.8 --stage-seconds 2.0 --save-training-images --validation-every 999 --beep",
+            extraArguments: "--preset training --settle-seconds 0.8 --stage-seconds 2.0 --save-training-images --validation-every 999 --beep --model-openness",
             title: "Eyelid training capture",
             message: "A terminal was opened. Follow the beep prompts for open, wide, half, squint, closed, and open again.");
     }

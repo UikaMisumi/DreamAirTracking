@@ -91,6 +91,10 @@ public sealed class ModelRegistryEntry
 {
     public string Id { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    // Per-model version identity, distinct from the repo commit (e.g. "1.0", "1.1"). Optional.
+    public string Version { get; set; } = string.Empty;
+    // ISO date this specific model was trained/published (e.g. "2026-07-09"). Optional.
+    public string UpdatedAt { get; set; } = string.Empty;
     public string DeviceFamily { get; set; } = "Dream Air";
     public string Role { get; set; } = "main";
     public string Architecture { get; set; } = string.Empty;

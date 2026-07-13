@@ -152,15 +152,28 @@ public sealed partial class ModelsPage : Page
             Text = package.DisplayName,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
         });
+        // Version and date are distinct: "Version <tag>" then the publish date, kept separate.
+        var versionParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(package.Version))
+        {
+            versionParts.Add($"Version {package.Version}");
+        }
+        if (!string.IsNullOrWhiteSpace(package.PublishedDate))
+        {
+            versionParts.Add(package.PublishedDate);
+        }
+        if (versionParts.Count > 0)
+        {
+            text.Children.Add(new TextBlock
+            {
+                Text = string.Join("  ·  ", versionParts),
+                Foreground = SecondaryBrush(),
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
         text.Children.Add(new TextBlock
         {
-            Text = $"Paired main + expression package  |  files={package.Files.Count}",
-            Foreground = SecondaryBrush(),
-            TextWrapping = TextWrapping.Wrap
-        });
-        text.Children.Add(new TextBlock
-        {
-            Text = $"Architecture: {package.Architecture}",
+            Text = $"Architecture: {package.Architecture}  |  files={package.Files.Count}",
             Foreground = SecondaryBrush(),
             TextWrapping = TextWrapping.Wrap
         });

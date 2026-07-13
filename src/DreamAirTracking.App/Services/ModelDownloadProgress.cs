@@ -20,6 +20,7 @@ public sealed record RemoteModelPackage(
     string Id,
     string DisplayName,
     string Version,
+    string PublishedDate,
     string MainModelId,
     string? ExpressionModelId,
     string Runtime,

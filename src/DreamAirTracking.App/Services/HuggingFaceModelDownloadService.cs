@@ -226,9 +226,7 @@ public sealed class HuggingFaceModelDownloadService
             return Array.Empty<RemoteModelPackage>();
         }
 
-        var version = lastModified is null
-            ? $"revision {ShortRevision(revision)}"
-            : $"{lastModified.Value:yyyy.MM.dd} ({ShortRevision(revision)})";
+        var repoDate = lastModified?.ToString("yyyy-MM-dd") ?? string.Empty;
 
         var packages = new List<RemoteModelPackage>();
         foreach (var main in registry.Models.Where(model =>
@@ -238,11 +236,18 @@ public sealed class HuggingFaceModelDownloadService
             AddModelFiles(files, main, siblingNames);
             AddModelFiles(files, expression, siblingNames);
 
-            var label = string.IsNullOrWhiteSpace(main.DisplayName) ? main.Id : main.DisplayName;
+            // Name / version / date are three separate things: the model's own displayName,
+            // its own version tag, and its own publish date — falling back to the id / the
+            // repo revision / the repo commit date only when a model doesn't specify its own.
+            var displayName = string.IsNullOrWhiteSpace(main.DisplayName) ? main.Id : main.DisplayName;
+            var version = string.IsNullOrWhiteSpace(main.Version) ? ShortRevision(revision) : main.Version;
+            var publishedDate = string.IsNullOrWhiteSpace(main.UpdatedAt) ? repoDate : main.UpdatedAt;
+
             packages.Add(new RemoteModelPackage(
                 $"{main.Id}+{expression.Id}@{ShortRevision(revision)}",
-                $"{label} — {version}",
+                displayName,
                 version,
+                publishedDate,
                 main.Id,
                 expression.Id,
                 main.Runtime,
@@ -394,6 +399,8 @@ public sealed class HuggingFaceModelDownloadService
         {
             Id = entry.Id,
             DisplayName = entry.DisplayName,
+            Version = entry.Version,
+            UpdatedAt = entry.UpdatedAt,
             DeviceFamily = entry.DeviceFamily,
             Role = entry.Role,
             Architecture = entry.Architecture,

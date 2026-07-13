@@ -313,22 +313,84 @@ public sealed partial class CalibrationPage : Page
         UpdateBridgeOptionsStatus();
     }
 
+    // Both legacy eyelid buttons now run the in-app RAMP capture (S3): the staged terminal
+    // protocol trained the openness head into a 4-level quantizer (constant labels per stage),
+    // while the ramp stages give per-frame time-progress labels — dense continuous supervision
+    // that doesn't depend on image measurements (unreliable on the side-view cameras).
     private void StartOpennessCalibration_Click(object sender, RoutedEventArgs e)
-    {
-        StartOpennessProcess(
-            outputSubdirectory: IOPath.Combine("runs", "live_openness_calibration_app"),
-            extraArguments: "--settle-seconds 1.5 --stage-seconds 4 --beep --model-openness",
-            title: "Eyelid calibration",
-            message: "A terminal was opened. Follow the beep prompts, then use latest eyelid calibration.");
-    }
+        => _ = StartRampCaptureAsync();
 
     private void StartOpennessTrainingCapture_Click(object sender, RoutedEventArgs e)
+        => _ = StartRampCaptureAsync();
+
+    private void StartRampCapture_Click(object sender, RoutedEventArgs e)
+        => _ = StartRampCaptureAsync();
+
+    private async Task StartRampCaptureAsync()
     {
-        StartOpennessProcess(
-            outputSubdirectory: IOPath.Combine("runs", "fullparam_capture", $"eyelid_app_{DateTime.Now:yyyyMMdd_HHmmss}"),
-            extraArguments: "--preset training --settle-seconds 0.8 --stage-seconds 2.0 --save-training-images --validation-every 999 --beep --model-openness",
-            title: "Eyelid training capture",
-            message: "A terminal was opened. Follow the beep prompts for open, wide, half, squint, closed, and open again.");
+        if (EyelidRampCaptureService.Instance.IsRunning)
+        {
+            return;
+        }
+
+        SaveBridgeOptions();
+        var options = BridgeProcessService.Instance.Options;
+        string? onnxPath = options.MultitaskOnnxPath;
+        string? metadataPath = options.MultitaskMetadataPath;
+        if (string.IsNullOrWhiteSpace(onnxPath) || !File.Exists(onnxPath))
+        {
+            var registry = Core.Models.ModelRegistry.TryLoad(Core.Models.ModelRegistry.DefaultUserRegistryPath());
+            var main = registry?.FindDefaultMain();
+            onnxPath = main?.ResolvedOnnx;
+            metadataPath = main?.ResolvedMetadata;
+        }
+        if (string.IsNullOrWhiteSpace(onnxPath) || !File.Exists(onnxPath))
+        {
+            RampStageText.Text = "No installed model found — download/select a model package first.";
+            return;
+        }
+
+        int imageSize = Core.Runtime.EyeModelMetadata.ReadImageSize(metadataPath, 128);
+        var sessionDirectory = IOPath.Combine(
+            FindRepoRoot(), "runs", "fullparam_capture", $"eyelid_ramp_app_{DateTime.Now:yyyyMMdd_HHmmss}");
+
+        StartRampCaptureButton.IsEnabled = false;
+        StartOpennessCalibrationButton.IsEnabled = false;
+        StartOpennessTrainingCaptureButton.IsEnabled = false;
+        RampPromptText.Visibility = Visibility.Visible;
+        RampTargetBar.Visibility = Visibility.Visible;
+        RampTotalBar.Visibility = Visibility.Visible;
+        RampStageText.Text = "Follow the prompt — the bar is your TARGET eyelid position.";
+
+        var progress = new Progress<EyelidRampCaptureService.RampProgress>(p =>
+        {
+            RampPromptText.Text = $"{p.Prompt}  ({p.StageRemainingSeconds:0.0}s)";
+            RampTargetBar.Value = p.TargetOpenness;
+            RampTotalBar.Value = p.TotalFraction;
+        });
+
+        try
+        {
+            var result = await EyelidRampCaptureService.Instance.RunAsync(
+                "127.0.0.1", BrokenEyePort, onnxPath, imageSize, sessionDirectory, progress);
+            RampPromptText.Text = result.Success ? "Done." : "Failed.";
+            RampStageText.Text = result.Message + (result.Success
+                ? " Restart eye tracking to use the new calibration."
+                : string.Empty);
+        }
+        catch (Exception ex)
+        {
+            RampPromptText.Text = "Failed.";
+            RampStageText.Text = $"Ramp capture failed: {ex.Message}";
+        }
+        finally
+        {
+            StartRampCaptureButton.IsEnabled = true;
+            StartOpennessCalibrationButton.IsEnabled = true;
+            StartOpennessTrainingCaptureButton.IsEnabled = true;
+            RampTargetBar.Visibility = Visibility.Collapsed;
+            RampTotalBar.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void StartOpennessProcess(string outputSubdirectory, string extraArguments, string title, string message)

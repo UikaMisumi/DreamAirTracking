@@ -178,6 +178,34 @@
                         <Button x:Name="StartOpennessCalibrationButton" Content="Calibrate eyelids" Click="StartOpennessCalibration_Click" />
                         <Button x:Name="StartOpennessTrainingCaptureButton" Content="Capture eyelid training" Click="StartOpennessTrainingCapture_Click" />
                     </StackPanel>
+                    <StackPanel x:Name="RampCapturePanel" Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="StartRampCaptureButton" Content="Capture eyelids (ramp)" Click="StartRampCapture_Click" />
+                            <TextBlock
+                                x:Name="RampStageText"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="~25s guided capture: holds + slow-close/slow-open ramps. Produces calibration + training labels."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="RampPromptText"
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text=""
+                            Visibility="Collapsed" />
+                        <ProgressBar
+                            x:Name="RampTargetBar"
+                            Minimum="0"
+                            Maximum="1"
+                            Value="1"
+                            Visibility="Collapsed" />
+                        <ProgressBar
+                            x:Name="RampTotalBar"
+                            Minimum="0"
+                            Maximum="1"
+                            Value="0"
+                            Visibility="Collapsed" />
+                    </StackPanel>
 
                     <Grid ColumnSpacing="16" RowSpacing="12">
                         <Grid.ColumnDefinitions>

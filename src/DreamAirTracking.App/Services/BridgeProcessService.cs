@@ -1184,6 +1184,8 @@ public sealed class BridgeProcessService
         {
             MainOnnxPath = onnxPath,
             ImageSize = EyeModelMetadata.ReadImageSize(metadataPath, 128),
+            // P0-2: models trained on recentered crops declare it in metadata; runtime must match
+            PupilRecenterEnabled = EyeModelMetadata.ReadRecenteredInput(metadataPath),
             ExpressionOnnxPath = !string.IsNullOrWhiteSpace(expressionOnnxPath) && File.Exists(expressionOnnxPath) ? expressionOnnxPath : null,
             ExpressionImageSize = EyeModelMetadata.ReadImageSize(expressionMetadataPath, 128),
             ExpressionEveryNFrames = 3,

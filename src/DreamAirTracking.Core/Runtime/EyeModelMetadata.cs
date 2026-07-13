@@ -18,6 +18,18 @@ public static class EyeModelMetadata
         return fallback;
     }
 
+    /// <summary>P0-2: whether the model was trained on pupil-recentered inputs.</summary>
+    public static bool ReadRecenteredInput(string? metadataPath)
+    {
+        if (string.IsNullOrWhiteSpace(metadataPath) || !File.Exists(metadataPath)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(metadataPath));
+            return doc.RootElement.TryGetProperty("recentered_input", out var v) && v.ValueKind == JsonValueKind.True;
+        }
+        catch { return false; }
+    }
+
     /// <summary>
     /// Loads (open_p95, closed_p05) per eye from a v2 openness_calibration.json.
     /// Mirrors Python load_per_eye_openness_calibration; returns false for missing/v1/invalid files.

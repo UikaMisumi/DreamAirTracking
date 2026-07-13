@@ -18,11 +18,32 @@ public static class EyeTensorPreprocessor
 {
     public static float[] Preprocess(byte[] jpeg, int size)
     {
-        using var image = Image.Load<L8>(jpeg);
-        int inW = image.Width, inH = image.Height;
-        var src = new byte[inW * inH];
-        image.CopyPixelDataTo(src);
+        var (src, inW, inH) = DecodeGray(jpeg);
+        return ResizeToTensor(src, inW, inH, size);
+    }
 
+    /// <summary>
+    /// P0-2 path: decode -> pupil-recenter (integer shift at native resolution) -> resize.
+    /// Mirrors Python <c>preprocess_recentered</c>; the shift happens BEFORE the resize so
+    /// the model always sees the eye at the canonical position regardless of wear geometry.
+    /// </summary>
+    public static float[] PreprocessRecentered(byte[] jpeg, int size, PupilRecenter state, (double X, double Y) canonical, bool isLeft)
+    {
+        var (src, inW, inH) = DecodeGray(jpeg);
+        src = state.RecenterFrame(src, inW, inH, canonical, isLeft);
+        return ResizeToTensor(src, inW, inH, size);
+    }
+
+    private static (byte[] Pixels, int Width, int Height) DecodeGray(byte[] jpeg)
+    {
+        using var image = Image.Load<L8>(jpeg);
+        var src = new byte[image.Width * image.Height];
+        image.CopyPixelDataTo(src);
+        return (src, image.Width, image.Height);
+    }
+
+    private static float[] ResizeToTensor(byte[] src, int inW, int inH, int size)
+    {
         if (inW == size && inH == size)
         {
             var direct = new float[size * size];

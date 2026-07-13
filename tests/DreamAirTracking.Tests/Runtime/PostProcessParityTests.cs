@@ -89,6 +89,33 @@ public sealed class PostProcessParityTests
     }
 
     [Fact]
+    public void PupilRecenterParity()
+    {
+        int i = 0;
+        foreach (var c in Fx.GetProperty("pupil_recenter").EnumerateArray())
+        {
+            int h = c.GetProperty("height").GetInt32();
+            int w = c.GetProperty("width").GetInt32();
+            var img = c.GetProperty("image").EnumerateArray().Select(x => (byte)x.GetInt32()).ToArray();
+            var canonArr = A(c.GetProperty("canonical"));
+            var expCentroid = A(c.GetProperty("centroid"));
+            var expOut = c.GetProperty("output").EnumerateArray().Select(x => (byte)x.GetInt32()).ToArray();
+
+            bool isLeft = c.GetProperty("is_left").GetBoolean();
+            var (cx, cy, conf) = PupilRecenter.EstimateDarkCentroid(img, w, h, isLeft);
+            Assert.True(Math.Abs(cx - expCentroid[0]) <= 1e-9 && Math.Abs(cy - expCentroid[1]) <= 1e-9,
+                $"pupil_recenter[{i}] centroid: exp ({expCentroid[0]},{expCentroid[1]}) got ({cx},{cy})");
+            Assert.Equal(expCentroid[2], conf, 9);
+
+            var got = conf > 0.5
+                ? PupilRecenter.RecenterGray(img, w, h, (cx, cy), (canonArr[0], canonArr[1]))
+                : img;
+            Assert.True(got.SequenceEqual(expOut), $"pupil_recenter[{i}] shifted bytes differ");
+            i++;
+        }
+    }
+
+    [Fact]
     public void WideHysteresisParity()
     {
         foreach (var grp in Fx.GetProperty("wide_hysteresis").EnumerateArray())

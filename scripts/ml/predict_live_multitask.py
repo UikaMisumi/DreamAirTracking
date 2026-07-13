@@ -39,6 +39,33 @@ from live_gaze_dry_run import (  # noqa: E402
     save_pair_snapshots,
     update_smooth,
 )
+from pupil_recenter import (  # noqa: E402
+    CANONICAL_LEFT,
+    CANONICAL_RIGHT,
+    PupilRecenterState,
+    recenter_frame,
+)
+from io import BytesIO  # noqa: E402
+from PIL import Image  # noqa: E402
+
+
+def preprocess_recentered(
+    jpeg: bytes,
+    image_size: int,
+    state: PupilRecenterState,
+    canonical: "tuple[float, float]",
+    is_left: bool,
+) -> np.ndarray:
+    """P0-2 preprocess: decode -> pupil-recenter (integer shift) -> Pillow BILINEAR resize.
+
+    The shift happens at native resolution BEFORE the resize, so the model always sees
+    the eye at the canonical position regardless of gasket/wear geometry.
+    """
+    image = Image.open(BytesIO(jpeg)).convert("L")
+    gray = np.asarray(image, dtype=np.uint8)
+    gray = recenter_frame(gray, state, canonical, is_left)
+    resized = Image.fromarray(gray).resize((image_size, image_size), Image.Resampling.BILINEAR)
+    return np.asarray(resized, dtype=np.float32) / 255.0
 
 
 def load_image_size(metadata_path: Path | None, fallback: int) -> int:
@@ -46,6 +73,18 @@ def load_image_size(metadata_path: Path | None, fallback: int) -> int:
         return fallback
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     return int(payload.get("image_size", fallback))
+
+
+def load_recentered_input_flag(metadata_path: "Path | None") -> bool:
+    """P0-2: models trained on pupil-recentered crops mark it in their metadata; the
+    runtime must apply the same normalization or the model sees the wrong geometry."""
+    if metadata_path is None or not metadata_path.exists():
+        return False
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        return bool(payload.get("recentered_input", False))
+    except (OSError, ValueError):
+        return False
 
 
 def make_session_options(threads: int) -> ort.SessionOptions:
@@ -72,8 +111,15 @@ def run_onnx(
     right: JpegFrame,
     image_size: int,
     output_names: list[str] | None = None,
+    recenter: "tuple[PupilRecenterState, PupilRecenterState] | None" = None,
 ) -> dict[str, np.ndarray]:
-    image = np.stack([preprocess(left.jpeg, image_size), preprocess(right.jpeg, image_size)], axis=0)
+    if recenter is not None:
+        image = np.stack([
+            preprocess_recentered(left.jpeg, image_size, recenter[0], CANONICAL_LEFT, is_left=True),
+            preprocess_recentered(right.jpeg, image_size, recenter[1], CANONICAL_RIGHT, is_left=False),
+        ], axis=0)
+    else:
+        image = np.stack([preprocess(left.jpeg, image_size), preprocess(right.jpeg, image_size)], axis=0)
     batch = image[None].astype(np.float32)
     available = {item.name for item in session.get_outputs()}
     if output_names is None:
@@ -864,6 +910,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--onnx", type=Path, default=Path("runs/eye_multitask_mobilenetv3_fullparam_round1_twochannel_retarget070/eye_multitask.onnx"))
     parser.add_argument("--metadata", type=Path, default=Path("runs/eye_multitask_mobilenetv3_fullparam_round1_twochannel_retarget070/eye_multitask.metadata.json"))
+    parser.add_argument("--pupil-recenter", choices=("auto", "on", "off"), default="auto",
+                        help="P0-2 geometric input normalization; auto = follow the model metadata's recentered_input flag.")
     parser.add_argument("--expression-onnx", type=Path, help="Optional secondary ONNX used only for wide_lr/squint_lr.")
     parser.add_argument("--expression-metadata", type=Path, help="Optional metadata for --expression-onnx image size.")
     parser.add_argument("--expression-every-n-frames", type=int, default=1, help="Run secondary expression ONNX every N emitted frames and hold between updates.")
@@ -983,6 +1031,15 @@ def main() -> int:
     args = parser.parse_args()
 
     image_size = load_image_size(args.metadata.resolve() if args.metadata else None, args.image_size)
+    # P0-2: enable pupil recentering when the model was trained on recentered inputs
+    # (metadata flag), or forced by CLI. States are per-eye (independent geometry).
+    recenter_enabled = args.pupil_recenter == "on" or (
+        args.pupil_recenter == "auto"
+        and load_recentered_input_flag(args.metadata.resolve() if args.metadata else None)
+    )
+    recenter_states = (PupilRecenterState(), PupilRecenterState()) if recenter_enabled else None
+    if recenter_enabled:
+        print("[runtime] pupil recentering: ON (canonical L=%s R=%s)" % (CANONICAL_LEFT, CANONICAL_RIGHT))
     session = ort.InferenceSession(str(args.onnx.resolve()), sess_options=make_session_options(args.onnx_threads), providers=["CPUExecutionProvider"])
     expression_session = None
     expression_image_size = image_size
@@ -1175,7 +1232,7 @@ def main() -> int:
                 if delta_ms > args.max_delta_ms or not capture_enabled:
                     continue
 
-                result = run_onnx(session, left, right, image_size)
+                result = run_onnx(session, left, right, image_size, recenter=recenter_states)
                 if expression_session is not None:
                     next_sequence = sequence + 1
                     should_update_expression = (

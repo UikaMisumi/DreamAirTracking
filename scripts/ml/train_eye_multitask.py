@@ -245,8 +245,26 @@ def augment_image(image: Image.Image, rng: random.Random,
 
 def image_to_tensor(path: Path, size: int, train: bool, rng: random.Random,
                     ty_frac: float = 0.10, tx_frac: float = 0.12, shadow: bool = False,
-                    motion_blur: bool = False) -> torch.Tensor:
-    image = Image.open(path).convert("L").resize((size, size), Image.Resampling.BILINEAR)
+                    motion_blur: bool = False,
+                    recenter_canonical: "tuple[float, float] | None" = None,
+                    recenter_fallback: "tuple[float, float] | None" = None,
+                    recenter_is_left: bool = True) -> torch.Tensor:
+    image = Image.open(path).convert("L")
+    if recenter_canonical is not None:
+        # P0-2: normalize geometry BEFORE resize. Training uses the SESSION-median anchor
+        # (one constant shift per session): it kills the wear-level geometry variance —
+        # the actual problem — without per-frame jitter, and matches the runtime's slow
+        # EMA behaviour. Per-frame estimation is only the fallback for unknown sessions.
+        from pupil_recenter import estimate_dark_centroid, recenter_gray
+        gray = np.asarray(image, dtype=np.uint8)
+        center = recenter_fallback
+        if center is None:
+            cx, cy, conf = estimate_dark_centroid(gray, recenter_is_left)
+            center = (cx, cy) if conf > 0.5 else None
+        if center is not None:
+            gray = recenter_gray(gray, center, recenter_canonical)
+            image = Image.fromarray(gray)
+    image = image.resize((size, size), Image.Resampling.BILINEAR)
     if train:
         image = augment_image(image, rng, ty_frac, tx_frac, shadow, motion_blur)
     array = np.asarray(image, dtype=np.float32) / 255.0
@@ -255,16 +273,46 @@ def image_to_tensor(path: Path, size: int, train: bool, rng: random.Random,
     return torch.from_numpy(array.astype(np.float32, copy=False)).unsqueeze(0)
 
 
+def build_session_recenter_centers(samples: "list[Sample]") -> dict:
+    """Per-(session, side) median dark-centroid over a few open-ish frames — the fallback
+    center for frames whose own centroid is untrustworthy (closed eyes). P0-2."""
+    from pupil_recenter import estimate_dark_centroid
+    by_session: dict[str, list[Sample]] = {}
+    for sample in samples:
+        by_session.setdefault(sample.session, []).append(sample)
+    centers: dict = {}
+    for session, rows in by_session.items():
+        candidates = [s for s in rows if "closed" not in s.stage][:4] or rows[:4]
+        for side, attr in (("left", "left_file"), ("right", "right_file")):
+            pts = []
+            for s in candidates:
+                try:
+                    gray = np.asarray(Image.open(getattr(s, attr)).convert("L"), dtype=np.uint8)
+                except OSError:
+                    continue
+                cx, cy, conf = estimate_dark_centroid(gray, side == "left")
+                if conf > 0.5:
+                    pts.append((cx, cy))
+            if pts:
+                centers[(session, side)] = (
+                    float(np.median([p[0] for p in pts])),
+                    float(np.median([p[1] for p in pts])),
+                )
+    return centers
+
+
 class EyeMultitaskDataset(Dataset):
     def __init__(self, samples: list[Sample], image_size: int, train: bool, seed: int, min_weak_quality: float,
-                 gaze_openness_open_label: bool = False) -> None:
+                 gaze_openness_open_label: bool = False, pupil_recenter_input: bool = False) -> None:
         self.samples = samples
         self.image_size = image_size
         self.train = train
         self.seed = seed
         self.min_weak_quality = min_weak_quality
         self.gaze_openness_open_label = gaze_openness_open_label
+        self.pupil_recenter_input = pupil_recenter_input
         self.center_anchors = build_session_center_anchors(samples, min_weak_quality)
+        self.recenter_centers = build_session_recenter_centers(samples) if pupil_recenter_input else {}
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -280,8 +328,23 @@ class EyeMultitaskDataset(Dataset):
             ty_frac, tx_frac, shadow, mblur = 0.20, 0.13, True, True   # open gaze frames (now openness-supervised): medium
         else:
             ty_frac, tx_frac, shadow, mblur = 0.10, 0.12, False, False  # gaze without open-label: moderate (protect gaze)
-        left = image_to_tensor(sample.left_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur)
-        right = image_to_tensor(sample.right_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur)
+        if self.pupil_recenter_input:
+            # P0-2: geometry is normalized at the input, so big synthetic translations are no
+            # longer needed (and would fight the normalization). Keep a small residual range
+            # to cover centroid estimation error.
+            from pupil_recenter import CANONICAL_LEFT, CANONICAL_RIGHT
+            ty_frac, tx_frac = min(ty_frac, 0.10), min(tx_frac, 0.08)
+            left = image_to_tensor(sample.left_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur,
+                                   recenter_canonical=CANONICAL_LEFT,
+                                   recenter_fallback=self.recenter_centers.get((sample.session, "left")),
+                                   recenter_is_left=True)
+            right = image_to_tensor(sample.right_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur,
+                                    recenter_canonical=CANONICAL_RIGHT,
+                                    recenter_fallback=self.recenter_centers.get((sample.session, "right")),
+                                    recenter_is_left=False)
+        else:
+            left = image_to_tensor(sample.left_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur)
+            right = image_to_tensor(sample.right_file, self.image_size, self.train, rng, ty_frac, tx_frac, shadow, mblur)
         left_quality, right_quality, pair_quality = sample.confidence
         weak_pair = 1.0 if sample.has_weak and pair_quality >= self.min_weak_quality else 0.0
         left_pupil = 1.0 if sample.has_weak and left_quality >= self.min_weak_quality else 0.0
@@ -863,7 +926,7 @@ def train(args: argparse.Namespace) -> dict[str, object]:
         raise SystemExit("Manifest must contain both train and val samples.")
 
     train_loader = DataLoader(
-        EyeMultitaskDataset(train_samples, args.image_size, train=True, seed=args.seed, min_weak_quality=args.min_weak_quality, gaze_openness_open_label=args.gaze_openness_open_label),
+        EyeMultitaskDataset(train_samples, args.image_size, train=True, seed=args.seed, min_weak_quality=args.min_weak_quality, gaze_openness_open_label=args.gaze_openness_open_label, pupil_recenter_input=args.pupil_recenter_input),
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
@@ -871,7 +934,7 @@ def train(args: argparse.Namespace) -> dict[str, object]:
         persistent_workers=args.num_workers > 0,
     )
     val_loader = DataLoader(
-        EyeMultitaskDataset(val_samples, args.image_size, train=False, seed=args.seed, min_weak_quality=args.min_weak_quality),
+        EyeMultitaskDataset(val_samples, args.image_size, train=False, seed=args.seed, min_weak_quality=args.min_weak_quality, pupil_recenter_input=args.pupil_recenter_input),
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
@@ -1068,6 +1131,8 @@ def main() -> int:
         help="Bypass the head-mask training gate entirely (not recommended).",
     )
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--pupil-recenter-input", action="store_true",
+                        help="P0-2: train on pupil-recentered crops (geometric normalization); export/stamp metadata recentered_input accordingly.")
     parser.add_argument("--gaze-openness-open-label", action="store_true",
                         help="P1-7: supervise openness=1.0 (hard, protocol-known open) on open-eye gaze rows so the "
                              "openness head sees open eyes at many positions; constant label keeps gaze de-entangled.")

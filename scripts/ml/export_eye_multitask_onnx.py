@@ -35,7 +35,7 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[torch.nn.Mo
     return model, image_size, model_type
 
 
-def export_onnx(checkpoint: Path, output: Path, opset: int, device: torch.device) -> dict[str, object]:
+def export_onnx(checkpoint: Path, output: Path, opset: int, device: torch.device, recentered_input: bool = False) -> dict[str, object]:
     model, image_size, model_type = load_model(checkpoint, device)
     image = torch.zeros(1, 2, image_size, image_size, dtype=torch.float32, device=device)
     metadata = torch.zeros(1, METADATA_FEATURE_COUNT, dtype=torch.float32, device=device)
@@ -83,6 +83,8 @@ def export_onnx(checkpoint: Path, output: Path, opset: int, device: torch.device
             "confidence": "left,right,pair quality in [0, 1]",
         },
         "opset": opset,
+        # P0-2: model expects pupil-recentered inputs; runtimes read this to enable the step
+        "recentered_input": recentered_input,
     }
 
 
@@ -122,10 +124,11 @@ def main() -> int:
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--opset", type=int, default=17)
     parser.add_argument("--cpu", action="store_true")
+    parser.add_argument("--recentered-input", action="store_true", help="Stamp metadata: model was trained on pupil-recentered crops (P0-2).")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
-    metadata = export_onnx(args.checkpoint.resolve(), args.output.resolve(), args.opset, device)
+    metadata = export_onnx(args.checkpoint.resolve(), args.output.resolve(), args.opset, device, recentered_input=args.recentered_input)
     metadata["export_device"] = str(device)
     metadata["onnxruntime_verify"] = verify_with_onnxruntime(args.output.resolve(), metadata)
     metadata_path = args.metadata.resolve() if args.metadata else args.output.resolve().with_suffix(".metadata.json")

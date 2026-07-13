@@ -113,6 +113,35 @@ fx["wide_hysteresis"] = [{
     "steps": wide_hyst_seq(wh_seq),
 }]
 
+# ---- P0-2 pupil recenter (centroid + shift math parity) ----
+import pupil_recenter as PR
+
+def synth(h, w, cx, cy, r, bg, dark):
+    img = np.full((h, w), bg, dtype=np.uint8)
+    yy, xx = np.mgrid[0:h, 0:w]
+    img[(xx - cx * w) ** 2 + (yy - cy * h) ** 2 <= r * r] = dark
+    return img
+
+pr_cases = []
+for (h, w, cx, cy, r, bg, dark, canon, is_left) in [
+    (60, 80, 0.50, 0.40, 6, 160, 12, PR.CANONICAL_LEFT, True),
+    (60, 80, 0.55, 0.70, 5, 140, 8, PR.CANONICAL_RIGHT, False),
+    (48, 48, 0.62, 0.71, 4, 200, 20, PR.CANONICAL_LEFT, True),    # near-zero shift
+    (60, 80, 0.35, 0.10, 5, 150, 10, PR.CANONICAL_LEFT, True),    # clamped shift (dy huge)
+    (60, 80, 0.62, 0.50, 0, 150, 150, PR.CANONICAL_LEFT, True),   # no dark blob -> degenerate
+]:
+    img = synth(h, w, cx, cy, r, bg, dark)
+    ecx, ecy, conf = PR.estimate_dark_centroid(img, is_left)
+    out = PR.recenter_gray(img, (ecx, ecy), canon) if conf > 0.5 else img
+    pr_cases.append({
+        "height": h, "width": w, "is_left": is_left,
+        "image": img.reshape(-1).tolist(),
+        "canonical": list(canon),
+        "centroid": [float(ecx), float(ecy), float(conf)],
+        "output": out.reshape(-1).tolist(),
+    })
+fx["pupil_recenter"] = pr_cases
+
 # ---- eye_shape_curve ----
 esc = []
 for v in [[0.0, 0.5], [0.3, 0.9], [0.6, 1.0], [0.03, 0.05]]:

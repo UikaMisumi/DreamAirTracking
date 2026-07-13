@@ -25,6 +25,8 @@ public sealed class NeuralEyeRuntime : IDisposable
     private readonly PupilWideHold _pupilWide;
     private readonly OpennessDualPath _dualPath = new();
     private readonly WideHysteresis _wideHysteresis = new();
+    private readonly PupilRecenter _recenterLeft = new();
+    private readonly PupilRecenter _recenterRight = new();
     private readonly string _pupilMode;
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
 
@@ -49,8 +51,12 @@ public sealed class NeuralEyeRuntime : IDisposable
     /// <summary>Process one paired left/right frame. Advances runtime state. Returns the emitted state.</summary>
     public BridgeTrackingState ProcessPair(byte[] leftJpeg, byte[] rightJpeg, double frameTimestamp, double deltaMs)
     {
-        float[] leftBuf = EyeTensorPreprocessor.Preprocess(leftJpeg, _cfg.ImageSize);
-        float[] rightBuf = EyeTensorPreprocessor.Preprocess(rightJpeg, _cfg.ImageSize);
+        float[] leftBuf = _cfg.PupilRecenterEnabled
+            ? EyeTensorPreprocessor.PreprocessRecentered(leftJpeg, _cfg.ImageSize, _recenterLeft, PupilRecenter.CanonicalLeft, isLeft: true)
+            : EyeTensorPreprocessor.Preprocess(leftJpeg, _cfg.ImageSize);
+        float[] rightBuf = _cfg.PupilRecenterEnabled
+            ? EyeTensorPreprocessor.PreprocessRecentered(rightJpeg, _cfg.ImageSize, _recenterRight, PupilRecenter.CanonicalRight, isLeft: false)
+            : EyeTensorPreprocessor.Preprocess(rightJpeg, _cfg.ImageSize);
         EyeModelOutputs o = _model.RunMain(leftBuf, rightBuf);
 
         EyePair modelWide = o.Wide, modelSquint = o.Squint;

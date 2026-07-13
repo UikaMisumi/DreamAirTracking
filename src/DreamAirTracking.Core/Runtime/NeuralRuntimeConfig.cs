@@ -35,6 +35,9 @@ public sealed class NeuralRuntimeConfig
     public int OpennessHoverHoldFrames { get; set; } = 6;
     // S2 optional half-open anchor from the v2 calibration (piecewise-linear normalize)
     public EyePair? HalfP50 { get; set; }
+    // P0-2: the model was trained on pupil-recentered inputs (from its metadata) —
+    // the runtime must apply the same geometric normalization
+    public bool PupilRecenterEnabled { get; set; }
     // optional per-eye calibration (v2 open_p95/closed_p05); null => identity
     public EyePair? OpenP95 { get; set; }
     public EyePair? ClosedP05 { get; set; }

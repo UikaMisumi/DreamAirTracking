@@ -100,7 +100,16 @@ public sealed class NeuralEyeRuntime : IDisposable
 
         // expression + pupil
         float[] pupil = o.Pupil;
-        EyePair modelWideC = new(Clip01(modelWide.Left), Clip01(modelWide.Right));
+        // De-conflate wide from looking up: a raised upper lid drives wide, but the lid also raises
+        // when the eye looks up. Suppress wide by upward gaze so only a raised lid at a forward gaze
+        // (a genuine widen) survives. gate=1 forward, ->(1-suppress) fully up.
+        double wideGate = 1.0;
+        if (_cfg.WideGazeUpSuppress > 0.0)
+        {
+            double up = EyeMath.Clamp(_cfg.WideGazeUpSign * _smooth.Value.Y, 0.0, 1.0);
+            wideGate = 1.0 - EyeMath.Clamp(_cfg.WideGazeUpSuppress, 0.0, 1.0) * up;
+        }
+        EyePair modelWideC = new(Clip01(modelWide.Left) * wideGate, Clip01(modelWide.Right) * wideGate);
         EyePair modelSquintC = new(Clip01(modelSquint.Left), Clip01(modelSquint.Right));
         EyePair shapeWide = EyeShapeCurve.Apply(modelWideC, _cfg.EyeShapeWideScale, _cfg.EyeShapeGamma, _cfg.EyeShapeDeadzone);
         EyePair shapeSquint = EyeShapeCurve.Apply(modelSquintC, _cfg.EyeShapeSquintScale, _cfg.EyeShapeGamma, _cfg.EyeShapeDeadzone);

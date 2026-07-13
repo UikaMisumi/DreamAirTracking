@@ -63,6 +63,10 @@ public sealed class BridgeLaunchOptions
     public double EyeShapeSquintScale { get; set; } = 0.55;
     public double EyeShapeGamma { get; set; } = 1.15;
     public double EyeShapeDeadzone { get; set; } = 0.03;
+    // Suppress EyeWide by upward gaze so looking up doesn't fire wide (only a raised lid at a
+    // forward gaze = genuine widen). 0 = off; Sign flips which gaze-Y direction counts as "up".
+    public double WideGazeUpSuppress { get; set; } = 0.85;
+    public double WideGazeUpSign { get; set; } = 1.0;
     public double PupilWideEnterThreshold { get; set; } = 0.90;
     public double PupilWideExitThreshold { get; set; } = 0.86;
     public int PupilWideHoldFrames { get; set; } = 8;

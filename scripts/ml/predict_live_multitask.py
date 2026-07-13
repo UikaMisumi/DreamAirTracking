@@ -797,6 +797,8 @@ def main() -> int:
     parser.add_argument("--eye-shape-squint-scale", type=float, default=1.0, help="Scale applied only to VRCFT EyeSquint output.")
     parser.add_argument("--eye-shape-gamma", type=float, default=1.0, help="Gamma applied to VRCFT EyeWide/EyeSquint after deadzone.")
     parser.add_argument("--eye-shape-deadzone", type=float, default=0.0, help="Deadzone applied only to VRCFT EyeWide/EyeSquint.")
+    parser.add_argument("--wide-gaze-up-suppress", type=float, default=0.0, help="Suppress EyeWide by upward gaze (0=off,1=full) so looking up does not trigger wide; only a raised lid at forward gaze does.")
+    parser.add_argument("--wide-gaze-up-sign", type=float, default=1.0, help="Which smoothed gaze-Y sign is 'up' for wide suppression (flip to -1 if it suppresses on look-down).")
     parser.add_argument("--pupil-wide-enter-threshold", type=float, default=0.90, help="Raw/model wide value that turns on pupil constriction assist.")
     parser.add_argument("--pupil-wide-exit-threshold", type=float, default=0.86, help="Raw/model wide value below which pupil constriction assist fades out.")
     parser.add_argument("--pupil-wide-hold-frames", type=int, default=8, help="Frames to hold pupil constriction assist after a wide trigger.")
@@ -1142,6 +1144,13 @@ def main() -> int:
                         args.wide_model_threshold,
                         args.wide_output_threshold,
                     )
+                # De-conflate wide from looking up: the wide head fires on a raised upper lid, which
+                # also happens when the eye looks up. Suppress wide by upward gaze so only a raised lid
+                # at a forward gaze (a genuine widen) survives. Applied before both shaping and pupil.
+                if args.wide_gaze_up_suppress > 0.0:
+                    up = float(np.clip(args.wide_gaze_up_sign * float(smooth[1]), 0.0, 1.0))
+                    gate = 1.0 - float(np.clip(args.wide_gaze_up_suppress, 0.0, 1.0)) * up
+                    model_wide = (model_wide * gate).astype(np.float32)
                 shape_wide = apply_eye_shape_curve(model_wide, args.eye_shape_wide_scale, args.eye_shape_gamma, args.eye_shape_deadzone)
                 shape_squint = apply_eye_shape_curve(model_squint, args.eye_shape_squint_scale, args.eye_shape_gamma, args.eye_shape_deadzone)
                 pupil_wide = update_pupil_wide_state(

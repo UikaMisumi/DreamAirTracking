@@ -62,6 +62,12 @@ public sealed class NeuralRuntimeConfig
 
     // expression shaping (VRCFT wide/squint)
     public string WideSource { get; set; } = "model_head";
+    // Wide-vs-look-up de-conflation: the wide head fires on a raised upper lid, which also happens
+    // when looking UP. Suppress wide proportionally to upward gaze so only a raised lid at a
+    // forward gaze (genuine widen/surprise) drives EyeWide. Suppress in [0,1] (0 = off); Sign picks
+    // which gaze-Y direction is "up" (flip to -1 if it suppresses on look-down instead).
+    public double WideGazeUpSuppress { get; set; }
+    public double WideGazeUpSign { get; set; } = 1.0;
     public double EyeShapeWideScale { get; set; } = 0.60;
     public double EyeShapeSquintScale { get; set; } = 0.55;
     public double EyeShapeGamma { get; set; } = 1.15;

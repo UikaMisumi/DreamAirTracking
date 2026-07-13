@@ -589,6 +589,10 @@ public sealed class BridgeProcessService
             startInfo.ArgumentList.Add(Format(Options.EyeShapeGamma));
             startInfo.ArgumentList.Add("--eye-shape-deadzone");
             startInfo.ArgumentList.Add(Format(Options.EyeShapeDeadzone));
+            startInfo.ArgumentList.Add("--wide-gaze-up-suppress");
+            startInfo.ArgumentList.Add(Format(Options.WideGazeUpSuppress));
+            startInfo.ArgumentList.Add("--wide-gaze-up-sign");
+            startInfo.ArgumentList.Add(Format(Options.WideGazeUpSign));
             startInfo.ArgumentList.Add("--openness-curve-mode");
             startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(Options.OpennessCurveMode) ? "soft_open_plateau" : Options.OpennessCurveMode);
             startInfo.ArgumentList.Add("--openness-full-open-threshold");
@@ -1202,6 +1206,8 @@ public sealed class BridgeProcessService
             EyeShapeSquintScale = Options.EyeShapeSquintScale,
             EyeShapeGamma = Options.EyeShapeGamma,
             EyeShapeDeadzone = Options.EyeShapeDeadzone,
+            WideGazeUpSuppress = Options.WideGazeUpSuppress,
+            WideGazeUpSign = Options.WideGazeUpSign,
             PupilWideEnterThreshold = Options.PupilWideEnterThreshold,
             PupilWideExitThreshold = Options.PupilWideExitThreshold,
             PupilWideHoldFrames = Math.Max(0, Options.PupilWideHoldFrames),

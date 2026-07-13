@@ -1,6 +1,48 @@
 namespace DreamAirTracking.Core.Runtime.PostProcess;
 
 /// <summary>
+/// Temporal confirmation for the VRCFT EyeWide output (L3). Port of Python <c>WideHysteresis</c>.
+/// A genuine widen is a sustained expression; extrapolation noise at off-forward gaze is
+/// transient — so gate in the TIME domain: 0 until the shaped wide exceeds enterThreshold for
+/// confirmFrames consecutive frames; releases immediately below exitThreshold. Never touches gaze.
+/// </summary>
+public sealed class WideHysteresis
+{
+    private int _countL, _countR;
+    private bool _activeL, _activeR;
+
+    public EyePair Apply(EyePair shapedWide, int confirmFrames, double enterThreshold, double exitThreshold)
+    {
+        if (confirmFrames <= 0)
+            return shapedWide;
+        double l = One(shapedWide.Left, confirmFrames, enterThreshold, exitThreshold, ref _countL, ref _activeL);
+        double r = One(shapedWide.Right, confirmFrames, enterThreshold, exitThreshold, ref _countR, ref _activeR);
+        return new EyePair(EyeMath.Clamp(l, 0.0, 1.0), EyeMath.Clamp(r, 0.0, 1.0));
+    }
+
+    private static double One(double v, int confirmFrames, double enter, double exit, ref int count, ref bool active)
+    {
+        if (active)
+        {
+            if (v < exit)
+            {
+                active = false;
+                count = 0;
+                return 0.0;
+            }
+            return v;
+        }
+        count = v >= enter ? count + 1 : 0;
+        if (count >= confirmFrames)
+        {
+            active = true;
+            return v;
+        }
+        return 0.0;
+    }
+}
+
+/// <summary>
 /// VRCFT wide/squint shaping. Port of Python <c>apply_eye_shape_curve</c>
 /// (predict_live_multitask.py:256-264). Applied per eye.
 /// </summary>

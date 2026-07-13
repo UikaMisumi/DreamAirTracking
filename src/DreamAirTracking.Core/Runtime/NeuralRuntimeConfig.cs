@@ -74,6 +74,10 @@ public sealed class NeuralRuntimeConfig
     // which gaze-Y direction is "up" (flip to -1 if it suppresses on look-down instead).
     public double WideGazeUpSuppress { get; set; }
     public double WideGazeUpSign { get; set; } = 1.0;
+    // L3 wide temporal hysteresis (0 confirm frames = off)
+    public int WideConfirmFrames { get; set; }
+    public double WideEnterThreshold { get; set; } = 0.22;
+    public double WideExitThreshold { get; set; } = 0.12;
     public double EyeShapeWideScale { get; set; } = 0.60;
     public double EyeShapeSquintScale { get; set; } = 0.55;
     public double EyeShapeGamma { get; set; } = 1.15;

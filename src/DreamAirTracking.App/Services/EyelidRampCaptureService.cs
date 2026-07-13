@@ -69,6 +69,16 @@ public sealed class EyelidRampCaptureService
             SquintTarget: 1.0, SquintValid: true),
         new RampStage("wink_left", "Close LEFT eye only", "只闭左眼,右眼保持睁开", 2.0, 2.5, _ => 0.0, _ => 1.0),
         new RampStage("wink_right", "Close RIGHT eye only", "只闭右眼,左眼保持睁开", 2.0, 2.5, _ => 1.0, _ => 0.0),
+        // Cross-direction widen positives: manifest v7 audit showed ALL wide=1 samples were
+        // captured looking forward, so at left/right gaze the wide head extrapolates (random
+        // triggering). These stages put positives across the gaze space; the matching negatives
+        // (neutral gaze-calibration frames) already exist.
+        new RampStage("wide_look_left", "Look LEFT and open eyes WIDE", "看向左边,同时瞪大眼睛", 2.0, 2.0, _ => 1.0, _ => 1.0,
+            WideTarget: 1.0, WideValid: true, SquintTarget: 0.0, SquintValid: true),
+        new RampStage("wide_look_right", "Look RIGHT and open eyes WIDE", "看向右边,同时瞪大眼睛", 2.0, 2.0, _ => 1.0, _ => 1.0,
+            WideTarget: 1.0, WideValid: true, SquintTarget: 0.0, SquintValid: true),
+        new RampStage("wide_look_up", "Look UP and open eyes WIDE", "看向上方,同时瞪大眼睛", 2.0, 2.0, _ => 1.0, _ => 1.0,
+            WideTarget: 1.0, WideValid: true, SquintTarget: 0.0, SquintValid: true),
         new RampStage("open_confirm", "Eyes open, hold until done", "睁开双眼,保持到结束", 1.5, 2.5, _ => 1.0, _ => 1.0,
             WideTarget: 0.0, WideValid: true, SquintTarget: 0.0, SquintValid: true),
     };

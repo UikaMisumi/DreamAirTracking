@@ -91,6 +91,28 @@ fx["openness_dual_path"] = [{
     "steps": dual_path_seq(dp_seq),
 }]
 
+# ---- wide hysteresis (L3, stateful sequence) ----
+def wide_hyst_seq(seq, confirm=4, enter=0.22, exit_=0.12):
+    wh = P.WideHysteresis()
+    steps = []
+    for v in seq:
+        out = wh.apply(np.array(v, dtype=np.float32), confirm, enter, exit_)
+        steps.append({"input": v, "output": arr(out)})
+    return steps
+
+wh_seq = (
+    [[0.0, 0.0]] * 2
+    + [[0.3, 0.05], [0.0, 0.05]]                 # 1-frame transient: must never fire
+    + [[0.3, 0.0]] * 3 + [[0.05, 0.0]]           # 3 frames < confirm=4: still suppressed, then reset
+    + [[0.35, 0.0]] * 5                          # sustained: fires on frame 4
+    + [[0.30, 0.0], [0.08, 0.0], [0.3, 0.0]]     # dip below exit -> instant release, needs re-confirm
+    + [[0.0, 0.4]] * 5 + [[0.0, 0.0]]            # right eye independent
+)
+fx["wide_hysteresis"] = [{
+    "confirm_frames": 4, "enter_threshold": 0.22, "exit_threshold": 0.12,
+    "steps": wide_hyst_seq(wh_seq),
+}]
+
 # ---- eye_shape_curve ----
 esc = []
 for v in [[0.0, 0.5], [0.3, 0.9], [0.6, 1.0], [0.03, 0.05]]:

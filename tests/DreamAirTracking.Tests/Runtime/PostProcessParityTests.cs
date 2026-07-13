@@ -89,6 +89,23 @@ public sealed class PostProcessParityTests
     }
 
     [Fact]
+    public void WideHysteresisParity()
+    {
+        foreach (var grp in Fx.GetProperty("wide_hysteresis").EnumerateArray())
+        {
+            var wh = new WideHysteresis();
+            int confirm = grp.GetProperty("confirm_frames").GetInt32();
+            double enter = D(grp, "enter_threshold", 0.22), exit = D(grp, "exit_threshold", 0.12);
+            int i = 0;
+            foreach (var s in grp.GetProperty("steps").EnumerateArray())
+            {
+                var got = wh.Apply(P(s.GetProperty("input")), confirm, enter, exit);
+                Eq(P(s.GetProperty("output")), got, $"wide_hysteresis[{i++}]");
+            }
+        }
+    }
+
+    [Fact]
     public void OpennessDualPathParity()
     {
         foreach (var grp in Fx.GetProperty("openness_dual_path").EnumerateArray())

@@ -72,6 +72,11 @@ public sealed class BridgeLaunchOptions
     // real fix is model-side (wide=0 labels on neutral gaze frames -> gaze-invariant wide head).
     public double WideGazeUpSuppress { get; set; }
     public double WideGazeUpSign { get; set; } = 1.0;
+    // L3: EyeWide temporal hysteresis — a real widen is sustained; extrapolation noise is
+    // transient. Confirm frames of shaped wide >= enter before firing; instant release below exit.
+    public int WideConfirmFrames { get; set; } = 4;
+    public double WideEnterThreshold { get; set; } = 0.22;
+    public double WideExitThreshold { get; set; } = 0.12;
     public double PupilWideEnterThreshold { get; set; } = 0.90;
     public double PupilWideExitThreshold { get; set; } = 0.86;
     public int PupilWideHoldFrames { get; set; } = 8;

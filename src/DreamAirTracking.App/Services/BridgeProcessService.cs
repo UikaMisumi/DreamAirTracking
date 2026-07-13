@@ -593,6 +593,12 @@ public sealed class BridgeProcessService
             startInfo.ArgumentList.Add(Format(Options.WideGazeUpSuppress));
             startInfo.ArgumentList.Add("--wide-gaze-up-sign");
             startInfo.ArgumentList.Add(Format(Options.WideGazeUpSign));
+            startInfo.ArgumentList.Add("--wide-confirm-frames");
+            startInfo.ArgumentList.Add(Math.Max(0, Options.WideConfirmFrames).ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add("--wide-enter-threshold");
+            startInfo.ArgumentList.Add(Format(Options.WideEnterThreshold));
+            startInfo.ArgumentList.Add("--wide-exit-threshold");
+            startInfo.ArgumentList.Add(Format(Options.WideExitThreshold));
             startInfo.ArgumentList.Add("--openness-curve-mode");
             startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(Options.OpennessCurveMode) ? "soft_open_plateau" : Options.OpennessCurveMode);
             startInfo.ArgumentList.Add("--openness-hover-enter-velocity");
@@ -1214,6 +1220,9 @@ public sealed class BridgeProcessService
             EyeShapeDeadzone = Options.EyeShapeDeadzone,
             WideGazeUpSuppress = Options.WideGazeUpSuppress,
             WideGazeUpSign = Options.WideGazeUpSign,
+            WideConfirmFrames = Math.Max(0, Options.WideConfirmFrames),
+            WideEnterThreshold = Options.WideEnterThreshold,
+            WideExitThreshold = Options.WideExitThreshold,
             PupilWideEnterThreshold = Options.PupilWideEnterThreshold,
             PupilWideExitThreshold = Options.PupilWideExitThreshold,
             PupilWideHoldFrames = Math.Max(0, Options.PupilWideHoldFrames),

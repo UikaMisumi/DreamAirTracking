@@ -24,6 +24,7 @@ public sealed class NeuralEyeRuntime : IDisposable
     private readonly TrackingStateMachine _tracking;
     private readonly PupilWideHold _pupilWide;
     private readonly OpennessDualPath _dualPath = new();
+    private readonly WideHysteresis _wideHysteresis = new();
     private readonly string _pupilMode;
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
 
@@ -117,6 +118,7 @@ public sealed class NeuralEyeRuntime : IDisposable
         EyePair modelWideC = new(Clip01(modelWide.Left) * wideGate, Clip01(modelWide.Right) * wideGate);
         EyePair modelSquintC = new(Clip01(modelSquint.Left), Clip01(modelSquint.Right));
         EyePair shapeWide = EyeShapeCurve.Apply(modelWideC, _cfg.EyeShapeWideScale, _cfg.EyeShapeGamma, _cfg.EyeShapeDeadzone);
+        shapeWide = _wideHysteresis.Apply(shapeWide, _cfg.WideConfirmFrames, _cfg.WideEnterThreshold, _cfg.WideExitThreshold);
         EyePair shapeSquint = EyeShapeCurve.Apply(modelSquintC, _cfg.EyeShapeSquintScale, _cfg.EyeShapeGamma, _cfg.EyeShapeDeadzone);
         EyePair pw = _pupilWide.Update(modelWideC, _cfg.PupilWideEnterThreshold, _cfg.PupilWideExitThreshold,
             _cfg.PupilWideHoldFrames, _cfg.PupilWideEmaAlpha);

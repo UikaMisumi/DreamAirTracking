@@ -324,6 +324,46 @@ def load_per_eye_openness_calibration(
     return open_p95, closed_p05, half_p50
 
 
+class WideHysteresis:
+    """Temporal confirmation for the VRCFT EyeWide output (L3).
+
+    A genuine widen is a sustained, intentional expression (hundreds of ms); the wide head's
+    extrapolation noise at off-forward gaze is transient. So gate in the TIME domain (industry
+    debounce): output stays 0 until the shaped wide exceeds enter_threshold for confirm_frames
+    consecutive frames; releases immediately once below exit_threshold. Unlike the retired
+    gaze-space gate this never touches gaze and cannot suppress legitimate combinations.
+    """
+
+    def __init__(self) -> None:
+        self._count = [0, 0]
+        self._active = [False, False]
+
+    def apply(
+        self,
+        shaped_wide: np.ndarray,
+        confirm_frames: int,
+        enter_threshold: float,
+        exit_threshold: float,
+    ) -> np.ndarray:
+        if confirm_frames <= 0:
+            return shaped_wide
+        out = shaped_wide.astype(np.float32).copy()
+        for i in range(2):
+            v = float(shaped_wide[i])
+            if self._active[i]:
+                if v < exit_threshold:
+                    self._active[i] = False
+                    self._count[i] = 0
+                    out[i] = 0.0
+            else:
+                self._count[i] = self._count[i] + 1 if v >= enter_threshold else 0
+                if self._count[i] >= confirm_frames:
+                    self._active[i] = True
+                else:
+                    out[i] = 0.0
+        return np.clip(out, 0.0, 1.0).astype(np.float32)
+
+
 def apply_eye_shape_curve(values: np.ndarray, scale: float, gamma: float, deadzone: float) -> np.ndarray:
     shaped = np.clip(values.astype(np.float32), 0.0, 1.0)
     deadzone = float(np.clip(deadzone, 0.0, 0.95))
@@ -868,6 +908,9 @@ def main() -> int:
     parser.add_argument("--eye-shape-squint-scale", type=float, default=1.0, help="Scale applied only to VRCFT EyeSquint output.")
     parser.add_argument("--eye-shape-gamma", type=float, default=1.0, help="Gamma applied to VRCFT EyeWide/EyeSquint after deadzone.")
     parser.add_argument("--eye-shape-deadzone", type=float, default=0.0, help="Deadzone applied only to VRCFT EyeWide/EyeSquint.")
+    parser.add_argument("--wide-confirm-frames", type=int, default=0, help="EyeWide temporal hysteresis: consecutive frames above enter threshold before wide outputs (0=off).")
+    parser.add_argument("--wide-enter-threshold", type=float, default=0.22, help="Shaped-wide value that starts the confirmation count.")
+    parser.add_argument("--wide-exit-threshold", type=float, default=0.12, help="Shaped-wide value below which an active wide releases immediately.")
     parser.add_argument("--wide-gaze-up-suppress", type=float, default=0.0, help="Suppress EyeWide by upward gaze (0=off,1=full) so looking up does not trigger wide; only a raised lid at forward gaze does.")
     parser.add_argument("--wide-gaze-up-sign", type=float, default=1.0, help="Which smoothed gaze-Y sign is 'up' for wide suppression (flip to -1 if it suppresses on look-down).")
     parser.add_argument("--pupil-wide-enter-threshold", type=float, default=0.90, help="Raw/model wide value that turns on pupil constriction assist.")
@@ -1080,6 +1123,7 @@ def main() -> int:
     pupil_wide_hold_remaining = np.zeros(2, dtype=np.int32)
     openness_cal = load_per_eye_openness_calibration(args.openness_per_eye_calibration)
     dual_path = OpennessDualPath()
+    wide_hysteresis = WideHysteresis()
     if openness_cal is not None:
         print(
             f"Per-eye openness calibration: open_p95={openness_cal[0].tolist()} "
@@ -1240,6 +1284,9 @@ def main() -> int:
                     gate = 1.0 - float(np.clip(args.wide_gaze_up_suppress, 0.0, 1.0)) * up
                     model_wide = (model_wide * gate).astype(np.float32)
                 shape_wide = apply_eye_shape_curve(model_wide, args.eye_shape_wide_scale, args.eye_shape_gamma, args.eye_shape_deadzone)
+                shape_wide = wide_hysteresis.apply(
+                    shape_wide, args.wide_confirm_frames, args.wide_enter_threshold, args.wide_exit_threshold
+                )
                 shape_squint = apply_eye_shape_curve(model_squint, args.eye_shape_squint_scale, args.eye_shape_gamma, args.eye_shape_deadzone)
                 pupil_wide = update_pupil_wide_state(
                     model_wide,
